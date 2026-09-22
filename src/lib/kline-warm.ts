@@ -10,6 +10,7 @@ import {
   upsertKline,
 } from "@/lib/kline-store";
 import { configurePoliteSource, politeSourceStatus } from "@/lib/polite-fetch";
+import { cheapSkip } from "@/lib/snapshot-filter";
 import { SCAN_UNIVERSE } from "@/lib/universe";
 
 export type WarmOptions = {
@@ -37,7 +38,15 @@ export type WarmResult = {
 };
 
 function fallbackUniverse() {
-  return SCAN_UNIVERSE.map((item) => ({ code: item.code, name: item.code }));
+  return SCAN_UNIVERSE.map((item) => ({
+    code: item.code,
+    name: item.code,
+    board: item.board,
+    last: 1,
+    changePct: 0,
+    volumeRatio: null as number | null,
+    turnoverRatio: null as number | null,
+  }));
 }
 
 export async function warmKlineLibrary(options: WarmOptions = {}): Promise<WarmResult> {
@@ -45,16 +54,26 @@ export async function warmKlineLibrary(options: WarmOptions = {}): Promise<WarmR
   configurePoliteSource("sina", { concurrency: 2, minIntervalMs: 550, batchSize: 50 });
 
   const listed = await fetchAShareSnapshots(options.signal);
-  const universe = (listed?.rows ?? fallbackUniverse()).map((row) => ({
+  const rows = listed?.rows ?? fallbackUniverse();
+  const universe = rows.map((row) => ({
     code: row.code,
     name: row.name,
   }));
+  const snapshotByCode = new Map(rows.map((row) => [row.code, row]));
   const minLastDate = sessionMeta().asOf;
   const pendingAll = listCodesNeedingWarm({
     universe,
     minLastDate,
     minBars: 20,
     includeFail: options.includeFail ?? true,
+  });
+  // Prefer names that already pass the cheap snapshot screen so desk can review sooner.
+  pendingAll.sort((a, b) => {
+    const sa = snapshotByCode.get(a.code);
+    const sb = snapshotByCode.get(b.code);
+    const pa = sa && !cheapSkip(sa) ? 0 : 1;
+    const pb = sb && !cheapSkip(sb) ? 0 : 1;
+    return pa - pb;
   });
   const skippedFresh = universe.length - pendingAll.length;
   const pending = typeof options.limit === "number" ? pendingAll.slice(0, options.limit) : pendingAll;
@@ -90,17 +109,15 @@ export async function warmKlineLibrary(options: WarmOptions = {}): Promise<WarmR
     }
   }
 
-  const coverage = klineCoverage();
-  const result: WarmResult = {
+  return {
     attempted: pending.length,
     saved,
     failed,
     skippedFresh,
-    coverage,
+    coverage: klineCoverage(),
     sources: politeSourceStatus(),
     failSamples: listFailSamples(8),
   };
-  return result;
 }
 
 export function warmStatusPayload() {
@@ -110,7 +127,7 @@ export function warmStatusPayload() {
     coverage: klineCoverage(),
     sources: politeSourceStatus(),
     failSamples: listFailSamples(8),
-    note: "填库请跑 npm run kline:warm。盘中 /api/desk 只读本地库，不会批量打公开源。",
+    note: "填库请跑 npm run kline:warm。盘中 /api/desk 只读本地库，不会批量打公开源。优先铺快筛可能过关的票。",
   };
 }
 
