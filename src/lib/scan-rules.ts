@@ -16,6 +16,7 @@ export {
   SKIP_COPY,
   bumpSkip,
   emptyScanStats,
+  klineCapNote,
   topSkipLines,
   type ScanSkipReason,
   type ScanStats,

@@ -9,7 +9,7 @@ import {
   bumpSkipCount,
   emptyScanStats,
 } from "@/lib/scan-constants";
-import { evaluateSetup, topSkipLines } from "@/lib/scan-rules";
+import { evaluateSetup, klineCapNote, topSkipLines } from "@/lib/scan-rules";
 import { cheapSkip, snapshotScore, type SnapshotQuote } from "@/lib/snapshot-filter";
 import type { Candidate, DeskPayload, QuoteBook } from "@/lib/types";
 import { SCAN_UNIVERSE, boardFromCode } from "@/lib/universe";
@@ -159,6 +159,8 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
         return date && date > latest ? date : latest;
       }, meta.asOf);
     const skipHint = topSkipLines(stats);
+    const quotaNote = klineCapNote(stats);
+    const ruleHint = skipHint ? `硬规则主要挡掉：${skipHint}。` : "";
     const listLabel =
       stats.listVia === "akshare"
         ? "AKShare 快照"
@@ -169,10 +171,8 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
             : "40 只备用池";
     const notice =
       candidates.length === 0
-        ? `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，日K复核 ${stats.fetched} 只，硬规则一只都没放过。${
-            skipHint ? `主要挡掉：${skipHint}。` : ""
-          }空仓也是一种计划，全市场扫描不是保证赚钱。`
-        : `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，日K复核 ${stats.fetched} 只，硬规则通过 ${stats.passed} 只，按结构取前 ${candidates.length} 只。这是纪律过滤，不是胜率榜，更不是投资建议。`;
+        ? `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，日K复核 ${stats.fetched} 只，硬规则一只都没放过。${ruleHint}${quotaNote}空仓也是一种计划，全市场扫描不是保证赚钱。`
+        : `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，日K复核 ${stats.fetched} 只，硬规则通过 ${stats.passed} 只，按结构取前 ${candidates.length} 只。${quotaNote}这是纪律过滤，不是胜率榜，更不是投资建议。`;
 
     const quotes: QuoteBook = {};
     const keep = new Set([...candidates.map((item) => item.code), ...heldCodes]);

@@ -19,7 +19,13 @@ import { usePaperAccount } from "@/hooks/use-paper-account";
 import { getDeskPayload } from "@/lib/mock-data";
 import { formatMonthDay, nextTradingDay } from "@/lib/market";
 import { latestQuoteDate } from "@/lib/quotes";
-import { MAX_CANDIDATES, SKIP_COPY, topSkipLines, type ScanSkipReason } from "@/lib/scan-constants";
+import {
+  MAX_CANDIDATES,
+  SKIP_COPY,
+  klineCapNote,
+  topSkipLines,
+  type ScanSkipReason,
+} from "@/lib/scan-constants";
 import { advanceSession, tryClosePosition, tryOpenPosition } from "@/lib/paper";
 import type { Candidate, DeskPayload, ExitReason, MarketScene, MarkContext, QuoteBook } from "@/lib/types";
 import { CircleAlert, RefreshCw } from "lucide-react";
@@ -326,6 +332,8 @@ function EmptyCandidates({
   scanStats?: DeskPayload["scanStats"];
 }) {
   const skipHint = scanStats ? topSkipLines(scanStats) : "";
+  const quotaNote = scanStats ? klineCapNote(scanStats) : "";
+  const samples = (scanStats?.samples ?? []).filter((sample) => sample.reason !== "kline-cap");
   return (
     <div className="rounded-xl border border-dashed p-6">
       <h3 className="font-medium">这一批没有可做的票</h3>
@@ -337,12 +345,13 @@ function EmptyCandidates({
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
           沪深A股约 {scanStats.pool} 只 · 快筛留下 {scanStats.shortlisted ?? "—"} 只 · 日K复核{" "}
           {scanStats.fetched} 只 · 通过 {scanStats.passed} 只
-          {skipHint ? `。主要挡掉：${skipHint}` : ""}。
+          {skipHint ? `。硬规则主要挡掉：${skipHint}` : ""}。
         </p>
       ) : null}
-      {scanStats?.samples && scanStats.samples.length > 0 ? (
+      {quotaNote ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{quotaNote}</p> : null}
+      {samples.length > 0 ? (
         <ul className="mt-3 space-y-1 text-xs leading-5 text-muted-foreground">
-          {scanStats.samples.slice(0, 5).map((sample) => (
+          {samples.slice(0, 5).map((sample) => (
             <li key={sample.code}>
               {sample.name} {sample.code} ·{" "}
               {SKIP_COPY[sample.reason as ScanSkipReason] ?? sample.reason}

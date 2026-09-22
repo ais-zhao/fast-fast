@@ -50,7 +50,7 @@ export const SKIP_COPY: Record<ScanSkipReason, string> = {
   rr: "盈亏比不够",
   "fetch-fail": "日K没拉到",
   "not-ashare": "不是沪深A股",
-  "kline-cap": "快筛过关但未进入日K复核",
+  "kline-cap": "未排进今日日K复核配额",
 };
 
 export const HARD_RULE_LINES = [
@@ -62,6 +62,7 @@ export const HARD_RULE_LINES = [
   "当日涨幅小于 5%，连涨不超过 2 天；高开超过 4% 当追空处理",
   "收盘要落在当日区间上半，长上影、振幅过大不要",
   "近 10 日高点要有空间；止损不超过 6%，盈亏比至少 1.3",
+  "最多复核约 150 只日K（公开接口做不到五千只都拉K）；按更接近回踩的量比和涨幅排队，不是谁量最大谁先复核",
   "最多 5 只，按结构排序，不是谁量最大谁上榜",
 ];
 
@@ -106,11 +107,21 @@ export function bumpSkipCount(stats: ScanStats, reason: ScanSkipReason, count: n
 export function topSkipLines(
   stats: { skipped: Partial<Record<string, number>> },
   limit = 3,
+  exclude: string[] = ["kline-cap"],
 ): string {
+  const skip = new Set(exclude);
   const rows = Object.entries(stats.skipped)
     .filter((entry): entry is [ScanSkipReason, number] => entry[0] in SKIP_COPY && typeof entry[1] === "number")
+    .filter(([key]) => !skip.has(key))
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([key, count]) => `${SKIP_COPY[key]} ${count} 只`);
   return rows.join(" · ");
+}
+
+export function klineCapNote(stats: { skipped?: Partial<Record<string, number>>; fetched?: number }): string {
+  const leftover = stats.skipped?.["kline-cap"] ?? 0;
+  const reviewed = stats.fetched ?? 0;
+  if (leftover <= 0) return "";
+  return `快筛过关的票里，另有 ${leftover} 只没排进今日日K配额（今天实际复核 ${reviewed} 只）。这不是硬规则判不合格：公开延迟接口做不到五千只都拉K，排队靠更接近回踩的量比和涨幅，不是谁量最大谁先复核。`;
 }
