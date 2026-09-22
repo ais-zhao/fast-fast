@@ -19,6 +19,7 @@ import { getDeskPayload } from "@/lib/mock-data";
 import { formatMonthDay, nextTradingDay } from "@/lib/market";
 import { latestQuoteDate } from "@/lib/quotes";
 import { advanceSession, tryClosePosition, tryOpenPosition } from "@/lib/paper";
+import { scanDelayedDesk } from "@/lib/scan";
 import type { Candidate, DeskPayload, ExitReason, MarketScene, MarkContext, QuoteBook } from "@/lib/types";
 import { CircleAlert, RefreshCw } from "lucide-react";
 
@@ -27,7 +28,7 @@ type LoadState = "loading" | "ready" | "error";
 export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
   const [scene, setScene] = useState<MarketScene>("ok");
   const [offline, setOffline] = useState(false);
-  const [loadState, setLoadState] = useState<LoadState>("ready");
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<DeskPayload>(initialPayload);
   const [quotes, setQuotes] = useState<QuoteBook>(initialPayload.quotes ?? {});
@@ -38,7 +39,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
 
   useEffect(() => {
     void load("ok", false);
-    // First paint uses SSR mock; delayed scan runs once after mount.
+    // Browser fetches Tencent klines after mount; first paint is an empty loading state.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only fetch
   }, []);
 
@@ -53,7 +54,19 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
         setLoadState("ready");
         return;
       }
-      const held = paper.positions.map((item) => item.code).join(",");
+      const heldCodes = paper.positions.map((item) => item.code);
+      if (nextScene === "ok") {
+        try {
+          const next = await scanDelayedDesk(heldCodes);
+          setPayload(next);
+          setQuotes(next.quotes ?? {});
+          setLoadState("ready");
+          return;
+        } catch {
+          // Fall through to the server proxy, then to offline demo.
+        }
+      }
+      const held = heldCodes.join(",");
       const response = await fetch(`/api/desk?scene=${nextScene}&held=${held}`, { cache: "no-store" });
       if (!response.ok) {
         if (nextScene === "error") {
@@ -174,13 +187,15 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
         <DisclaimerBanner />
         <p className="text-sm text-muted-foreground">
           {payload.sessionLabel}。
-          {payload.dataSource === "delayed-public" ? "数据源：公开延迟行情，持仓按日K收盘计价。" : "数据源：离线演示。"}
+          {payload.dataSource === "delayed-public"
+            ? "数据源：浏览器直连腾讯财经日K（web.ifzq.gtimg.cn）。"
+            : "数据源：离线演示，不是腾讯行情。"}
           {payload.notice}
           {offline ? " 已锁定离线演示。" : ""}
         </p>
         {loadState === "loading" ? (
           <p className="text-xs text-muted-foreground" role="status">
-            正在拉取公开延迟行情…
+            正在向腾讯财经拉取日K。Chrome 开发者工具 → Network，过滤 gtimg，应出现 web.ifzq.gtimg.cn。
           </p>
         ) : null}
         {flash ? (

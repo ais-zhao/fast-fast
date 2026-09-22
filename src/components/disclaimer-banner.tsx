@@ -8,7 +8,8 @@ export function DisclaimerBanner() {
       <AlertTitle>不是投资建议</AlertTitle>
       <AlertDescription>
         这是给小白练纪律的纸上作战台，不接券商、不下实盘单，也不保证收益。A
-        股短线没有稳赚模型；涨跌停、T+1、情绪和政策都可能让任何规则失效。页面里的价格是模拟或延迟演示数据，不能代替你自己的判断。
+        股短线没有稳赚模型。正常模式下价格来自腾讯财经公开延迟日K（浏览器会请求
+        web.ifzq.gtimg.cn）；只有拉失败或你切离线演示时才用本地模拟名单。不能代替你自己的判断。
       </AlertDescription>
     </Alert>
   );

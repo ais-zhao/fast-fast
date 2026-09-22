@@ -36,6 +36,7 @@ export type Candidate = {
   suggestedStopPct: number;
   suggestedHoldDays: number;
   bar: OhlcBar;
+  sourceUrl: string;
 };
 
 export type DeskPayload = {

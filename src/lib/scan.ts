@@ -1,4 +1,4 @@
-import { fetchDailyKline, mapPool, type DailyBar, type StockKline } from "@/lib/public-kline";
+import { fetchDailyKline, mapPool, tencentKlineUrl, type DailyBar, type StockKline } from "@/lib/public-kline";
 import { sessionMeta } from "@/lib/market";
 import { toOhlcBar } from "@/lib/quotes";
 import { MAX_PER_STOCK, round2 } from "@/lib/rules";
@@ -81,6 +81,7 @@ function toCandidate(kline: StockKline, board: Board): Candidate | null {
     suggestedStopPct: stopPct,
     suggestedHoldDays: holdDays,
     bar: toOhlcBar(lastBar),
+    sourceUrl: tencentKlineUrl(kline.code),
   };
 }
 
@@ -128,7 +129,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
     const notice =
       candidates.length === 0
         ? "公开延迟行情已取到，但这一批观察池里没有同时满足：放量、站上均线、且不是涨停追高。空仓也是一种计划。"
-        : `候选来自公开延迟日线（腾讯财经），最多 8 只，不是实时成交价，更不是投资建议。观察池约 ${SCAN_UNIVERSE.length} 只主板/创业板，按量价规则硬过滤。每只展示最近一根开高低收。`;
+        : `候选来自浏览器直连的腾讯财经前复权日K（web.ifzq.gtimg.cn），最多 8 只。不是实时成交价，更不是投资建议。观察池约 ${SCAN_UNIVERSE.length} 只主板/创业板。点「腾讯日K原文」可核对开高低收。`;
 
     const quotes: QuoteBook = {};
     const keep = new Set([...candidates.map((item) => item.code), ...heldCodes]);

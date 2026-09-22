@@ -2,7 +2,7 @@ import { formatMonthDay, sessionMeta } from "@/lib/market";
 import { synthOhlc } from "@/lib/quotes";
 import type { Candidate, DeskPayload, QuoteBook } from "@/lib/types";
 
-type MockSeed = Omit<Candidate, "bar">;
+type MockSeed = Omit<Candidate, "bar" | "sourceUrl">;
 
 export const MOCK_SEEDS: MockSeed[] = [
   {
@@ -199,6 +199,7 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
       : MOCK_SEEDS.slice(0, 8).map((seed) => ({
           ...seed,
           bar: synthOhlc(meta.asOf, seed.last, seed.changePct),
+          sourceUrl: "",
         }));
   const quotes: QuoteBook = Object.fromEntries(candidates.map((item) => [item.code, [item.bar]]));
   const notice =
@@ -218,5 +219,21 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
     notice,
     dataSource: "offline-demo" as const,
     quotes,
+  };
+}
+
+export function loadingDeskPayload(): DeskPayload {
+  const meta = sessionMeta();
+  return {
+    asOf: meta.asOf,
+    planFor: meta.planFor,
+    calendarToday: meta.today,
+    marketOpen: meta.marketOpen,
+    sessionLabel: meta.sessionLabel,
+    candidates: [],
+    quotes: {},
+    dataSource: "delayed-public",
+    notice:
+      "正在由浏览器向腾讯财经（web.ifzq.gtimg.cn）拉取前复权日K。打开 Chrome 网络面板，过滤 gtimg，就能看到外网请求。首屏不再塞模拟名单。",
   };
 }

@@ -22,6 +22,11 @@ export function tencentSymbol(code: string): string {
   return code.startsWith("6") ? `sh${code}` : `sz${code}`;
 }
 
+export function tencentKlineUrl(code: string): string {
+  const symbol = tencentSymbol(code);
+  return `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${symbol},day,,,30,qfq`;
+}
+
 function toBar(raw: unknown, prevClose?: number): DailyBar | null {
   const parts = Array.isArray(raw) ? raw.map(String) : String(raw).split(",");
   if (parts.length < 6) return null;
@@ -38,11 +43,14 @@ function toBar(raw: unknown, prevClose?: number): DailyBar | null {
 
 export async function fetchDailyKline(code: string, signal?: AbortSignal): Promise<StockKline | null> {
   const symbol = tencentSymbol(code);
-  const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${symbol},day,,,30,qfq`;
+  const url = tencentKlineUrl(code);
   const response = await fetch(url, {
     signal,
     cache: "no-store",
-    headers: { "User-Agent": "Mozilla/5.0" },
+    headers:
+      typeof window === "undefined"
+        ? { "User-Agent": "Mozilla/5.0" }
+        : undefined,
   });
   if (!response.ok) return null;
   const json = (await response.json()) as {
