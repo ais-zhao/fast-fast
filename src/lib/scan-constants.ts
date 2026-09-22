@@ -50,7 +50,7 @@ export const SKIP_COPY: Record<ScanSkipReason, string> = {
   rr: "盈亏比不够",
   "fetch-fail": "日K没拉到",
   "not-ashare": "不是沪深A股",
-  "kline-cap": "未排进今日日K复核配额",
+  "kline-cap": "今天没拉这只的日K（每次最多 150 只）",
 };
 
 export const HARD_RULE_LINES = [
@@ -62,7 +62,7 @@ export const HARD_RULE_LINES = [
   "当日涨幅小于 5%，连涨不超过 2 天；高开超过 4% 当追空处理",
   "收盘要落在当日区间上半，长上影、振幅过大不要",
   "近 10 日高点要有空间；止损不超过 6%，盈亏比至少 1.3",
-  "最多复核约 150 只日K（公开接口做不到五千只都拉K）；按更接近回踩的量比和涨幅排队，不是谁量最大谁先复核",
+  "每只过硬规则都要单独拉日K；公开接口一次扫描先拉 150 只，第一波 0 只再加 150 只。没拉到的不是不合格，只是这次没去请求",
   "最多 5 只，按结构排序，不是谁量最大谁上榜",
 ];
 
@@ -123,5 +123,5 @@ export function klineCapNote(stats: { skipped?: Partial<Record<string, number>>;
   const leftover = stats.skipped?.["kline-cap"] ?? 0;
   const reviewed = stats.fetched ?? 0;
   if (leftover <= 0) return "";
-  return `快筛过关的票里，另有 ${leftover} 只没排进今日日K配额（今天实际复核 ${reviewed} 只）。这不是硬规则判不合格：公开延迟接口做不到五千只都拉K，排队靠更接近回踩的量比和涨幅，不是谁量最大谁先复核。`;
+  return `快筛过关后还有 ${leftover} 只今天根本没去拉日K。不是规则判它们不合格：快照只有最新价、涨跌幅、量比，均线和盈亏比必须按只请求日K；公开接口一次扫描先拉 ${MAX_KLINE_POOL} 只（今天实际拉到 ${reviewed} 只），70 秒内拉不完就停。排队看量比靠近 1.38、涨幅温和的回踩，不是谁量最大谁先拉。`;
 }
