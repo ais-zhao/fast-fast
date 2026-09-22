@@ -245,7 +245,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
             <div>
               <h2 className="text-lg font-medium">今日候选</h2>
               <p className="text-sm text-muted-foreground">
-                最多 {MAX_CANDIDATES} 只。沪深A股先快筛，再对进入日K复核的票过硬规则。
+                最多 {MAX_CANDIDATES} 只。沪深A股先快筛，再对本地日K库里的票过硬规则。
               </p>
             </div>
             {loadState !== "error" ? (
@@ -343,8 +343,11 @@ function EmptyCandidates({
       </p>
       {scanStats ? (
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          沪深A股约 {scanStats.pool} 只 · 快筛留下 {scanStats.shortlisted ?? "—"} 只 · 日K复核{" "}
+          沪深A股约 {scanStats.pool} 只 · 快筛留下 {scanStats.shortlisted ?? "—"} 只 · 本地日K复核{" "}
           {scanStats.fetched} 只 · 通过 {scanStats.passed} 只
+          {scanStats.cacheOk != null
+            ? ` · 日K库 ${scanStats.cacheOk}/${scanStats.cacheTotal ?? "—"}`
+            : ""}
           {skipHint ? `。硬规则主要挡掉：${skipHint}` : ""}。
         </p>
       ) : null}

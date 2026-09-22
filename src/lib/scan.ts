@@ -1,17 +1,18 @@
 import { attachTencentVolumeRatio, fetchAShareSnapshots } from "@/lib/market-list";
-import { fetchDailyKline, mapPool } from "@/lib/public-kline";
 import { sessionMeta } from "@/lib/market";
 import { toOhlcBar } from "@/lib/quotes";
+import { klineCoverage, loadKlineFromStore } from "@/lib/kline-store";
 import {
   MAX_CANDIDATES,
-  MAX_KLINE_POOL,
   bumpSkip,
   bumpSkipCount,
   emptyScanStats,
+  klineCapNote,
 } from "@/lib/scan-constants";
-import { evaluateSetup, klineCapNote, topSkipLines } from "@/lib/scan-rules";
-import { cheapSkip, snapshotScore, type SnapshotQuote } from "@/lib/snapshot-filter";
+import { evaluateSetup, topSkipLines } from "@/lib/scan-rules";
+import { cheapSkip, type SnapshotQuote } from "@/lib/snapshot-filter";
 import type { Candidate, DeskPayload, QuoteBook } from "@/lib/types";
+import type { StockKline } from "@/lib/public-kline";
 import { SCAN_UNIVERSE, boardFromCode } from "@/lib/universe";
 
 function fallbackPool(): SnapshotQuote[] {
@@ -37,6 +38,10 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
     const stats = emptyScanStats(listed?.total ?? snapshots.length);
     stats.listVia = listed?.via ?? "fallback-40";
 
+    const coverage = klineCoverage();
+    stats.cacheOk = coverage.ok;
+    stats.cacheTotal = Math.max(coverage.totalMeta, snapshots.length);
+
     const shortlist: SnapshotQuote[] = [];
     for (const row of snapshots) {
       const reason = cheapSkip(row);
@@ -52,7 +57,6 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
     }
 
     stats.shortlisted = shortlist.length;
-    shortlist.sort((a, b) => snapshotScore(b) - snapshotScore(a));
 
     const missingVolume = shortlist.filter((row) => row.volumeRatio == null).slice(0, 480);
     if (missingVolume.length > 0) {
@@ -69,7 +73,6 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       shortlist.length = 0;
       shortlist.push(...kept);
       stats.shortlisted = shortlist.length;
-      shortlist.sort((a, b) => snapshotScore(b) - snapshotScore(a));
     }
 
     const extraHeld = heldCodes
@@ -91,60 +94,38 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       })
       .filter((row): row is SnapshotQuote => row !== null);
 
-    const seen = new Set<string>();
-    const klineTargets: SnapshotQuote[] = [];
-    for (const row of extraHeld) {
-      if (seen.has(row.code)) continue;
-      seen.add(row.code);
-      klineTargets.push(row);
-    }
+    const reviewSet = new Map<string, SnapshotQuote>();
+    for (const row of shortlist) reviewSet.set(row.code, row);
+    for (const row of extraHeld) reviewSet.set(row.code, row);
 
-    const takeKlineSlice = (offset: number) => {
-      const slice = shortlist.slice(offset, offset + MAX_KLINE_POOL);
-      for (const row of slice) {
-        if (seen.has(row.code)) continue;
-        seen.add(row.code);
-        klineTargets.push(row);
+    const fetched: { kline: StockKline | null; candidate: Candidate | null }[] = [];
+    let missingLibrary = 0;
+
+    for (const item of reviewSet.values()) {
+      const cached = loadKlineFromStore(item.code);
+      if (!cached) {
+        missingLibrary += 1;
+        bumpSkip(stats, "kline-cap", { code: item.code, name: item.name });
+        fetched.push({ kline: null, candidate: null });
+        continue;
       }
-      return slice.length;
-    };
-
-    let klineReviewed = takeKlineSlice(0);
-
-    const reviewTargets = async (items: SnapshotQuote[]) =>
-      mapPool(items, 12, async (item) => {
-        try {
-          const kline = await fetchDailyKline(item.code, controller.signal);
-          if (!kline) {
-            bumpSkip(stats, "fetch-fail", { code: item.code, name: item.name });
-            return { kline: null, candidate: null };
-          }
-          stats.fetched += 1;
-          const evaluated = evaluateSetup(kline, item.board);
-          if (!evaluated.ok) {
-            bumpSkip(stats, evaluated.reason, { code: kline.code, name: kline.name });
-            return { kline, candidate: null };
-          }
-          stats.passed += 1;
-          return { kline, candidate: evaluated.candidate };
-        } catch {
-          bumpSkip(stats, "fetch-fail", { code: item.code, name: item.name });
-          return { kline: null, candidate: null };
-        }
-      });
-
-    const firstBatch = klineTargets.slice();
-    const fetched = await reviewTargets(firstBatch);
-    if (stats.passed === 0 && shortlist.length > MAX_KLINE_POOL) {
-      const start = klineTargets.length;
-      klineReviewed += takeKlineSlice(MAX_KLINE_POOL);
-      fetched.push(...(await reviewTargets(klineTargets.slice(start))));
+      if (item.name && item.name !== item.code) cached.name = item.name;
+      stats.fetched += 1;
+      stats.fromCache = (stats.fromCache ?? 0) + 1;
+      const evaluated = evaluateSetup(cached, item.board);
+      if (!evaluated.ok) {
+        bumpSkip(stats, evaluated.reason, { code: cached.code, name: cached.name });
+        fetched.push({ kline: cached, candidate: null });
+        continue;
+      }
+      stats.passed += 1;
+      fetched.push({ kline: cached, candidate: evaluated.candidate });
     }
-    bumpSkipCount(stats, "kline-cap", Math.max(0, shortlist.length - klineReviewed));
 
-    const gotBars = fetched.filter((row) => row.kline).length;
-    if (gotBars < 5 && stats.listVia === "fallback-40") {
-      throw new Error(`只拉到 ${gotBars} 只日K，不足 5 只。本机请打开 /api/kline?code=000001`);
+    if (stats.shortlisted > 0 && stats.fetched === 0 && stats.listVia === "fallback-40") {
+      throw new Error(
+        `本地日K库还没有可用数据（未收录 ${missingLibrary} 只）。请先跑 npm run kline:warm，再刷新。`,
+      );
     }
 
     const candidates = fetched
@@ -160,6 +141,14 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       }, meta.asOf);
     const skipHint = topSkipLines(stats);
     const quotaNote = klineCapNote(stats);
+    const coveragePct =
+      stats.cacheTotal && stats.cacheTotal > 0
+        ? Math.round(((stats.cacheOk ?? 0) / stats.cacheTotal) * 100)
+        : 0;
+    const coverageHint =
+      coveragePct < 80
+        ? `本地日K库覆盖约 ${coveragePct}%（${stats.cacheOk ?? 0}/${stats.cacheTotal ?? 0}），请先挂机跑 npm run kline:warm（限速、可中断续跑）。`
+        : `本地日K库覆盖约 ${coveragePct}%（${stats.cacheOk ?? 0}/${stats.cacheTotal ?? 0}）。`;
     const ruleHint = skipHint ? `硬规则主要挡掉：${skipHint}。` : "";
     const listLabel =
       stats.listVia === "akshare"
@@ -171,8 +160,8 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
             : "40 只备用池";
     const notice =
       candidates.length === 0
-        ? `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，日K复核 ${stats.fetched} 只，硬规则一只都没放过。${ruleHint}${quotaNote}空仓也是一种计划，全市场扫描不是保证赚钱。`
-        : `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，日K复核 ${stats.fetched} 只，硬规则通过 ${stats.passed} 只，按结构取前 ${candidates.length} 只。${quotaNote}这是纪律过滤，不是胜率榜，更不是投资建议。`;
+        ? `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，本地日K复核 ${stats.fetched} 只，硬规则一只都没放过。${coverageHint}${ruleHint}${quotaNote}空仓也是一种计划，全市场扫描不是保证赚钱。`
+        : `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，本地日K复核 ${stats.fetched} 只，硬规则通过 ${stats.passed} 只，按结构取前 ${candidates.length} 只。${coverageHint}${quotaNote}这是纪律过滤，不是胜率榜，更不是投资建议。`;
 
     const quotes: QuoteBook = {};
     const keep = new Set([...candidates.map((item) => item.code), ...heldCodes]);

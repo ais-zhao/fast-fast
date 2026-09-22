@@ -1,8 +1,10 @@
 export const MAX_CANDIDATES = 5;
+/** @deprecated Kept for docs/history; desk scan no longer caps live kline fetches. */
 export const MAX_KLINE_POOL = 150;
 export const MIN_VOLUME_RATIO = 1.2;
 export const MAX_VOLUME_RATIO = 2.8;
 export const MAX_DAY_GAIN = 5;
+export const MIN_CACHE_COVERAGE_PCT = 80;
 
 export type ScanSkipReason =
   | "bars"
@@ -50,11 +52,11 @@ export const SKIP_COPY: Record<ScanSkipReason, string> = {
   rr: "盈亏比不够",
   "fetch-fail": "日K没拉到",
   "not-ashare": "不是沪深A股",
-  "kline-cap": "今天没拉这只的日K（每次最多 150 只）",
+  "kline-cap": "日K库尚未收录",
 };
 
 export const HARD_RULE_LINES = [
-  "先扫沪深A股全市场快照（优先 AKShare 腾讯快照，带量比），北交所和 B 股不要；再对进入日K复核的票过硬规则",
+  "先扫沪深A股全市场快照（优先 AKShare 腾讯快照，带量比），北交所和 B 股不要；再对本地日K库里的票过硬规则",
   "一手不超过 2 万；ST、涨停、一字板不要",
   "量比 1.2～2.8，爆量高潮不要",
   "收盘站上 5 日和 10 日线，且 5 日线不低于 10 日线",
@@ -62,7 +64,7 @@ export const HARD_RULE_LINES = [
   "当日涨幅小于 5%，连涨不超过 2 天；高开超过 4% 当追空处理",
   "收盘要落在当日区间上半，长上影、振幅过大不要",
   "近 10 日高点要有空间；止损不超过 6%，盈亏比至少 1.3",
-  "每只过硬规则都要单独拉日K；公开接口一次扫描先拉 150 只，第一波 0 只再加 150 只。没拉到的不是不合格，只是这次没去请求",
+  "日K来自本地库（npm run kline:warm 多源限速铺齐）；未入库不是结构不合格。盘中扫描不批量打公开源",
   "最多 5 只，按结构排序，不是谁量最大谁上榜",
 ];
 
@@ -72,6 +74,9 @@ export type ScanStats = {
   passed: number;
   shortlisted: number;
   listVia: "akshare" | "eastmoney" | "sina" | "fallback-40";
+  fromCache?: number;
+  cacheOk?: number;
+  cacheTotal?: number;
   skipped: Partial<Record<ScanSkipReason, number>>;
   samples: { code: string; name: string; reason: ScanSkipReason }[];
 };
@@ -83,6 +88,9 @@ export function emptyScanStats(pool: number): ScanStats {
     passed: 0,
     shortlisted: 0,
     listVia: "eastmoney",
+    fromCache: 0,
+    cacheOk: 0,
+    cacheTotal: 0,
     skipped: {},
     samples: [],
   };
@@ -119,9 +127,13 @@ export function topSkipLines(
   return rows.join(" · ");
 }
 
-export function klineCapNote(stats: { skipped?: Partial<Record<string, number>>; fetched?: number }): string {
+export function klineCapNote(stats: {
+  skipped?: Partial<Record<string, number>>;
+  fetched?: number;
+  cacheOk?: number;
+  cacheTotal?: number;
+}): string {
   const leftover = stats.skipped?.["kline-cap"] ?? 0;
-  const reviewed = stats.fetched ?? 0;
   if (leftover <= 0) return "";
-  return `快筛过关后还有 ${leftover} 只今天根本没去拉日K。不是规则判它们不合格：快照只有最新价、涨跌幅、量比，均线和盈亏比必须按只请求日K；公开接口一次扫描先拉 ${MAX_KLINE_POOL} 只（今天实际拉到 ${reviewed} 只），70 秒内拉不完就停。排队看量比靠近 1.38、涨幅温和的回踩，不是谁量最大谁先拉。`;
+  return `另有 ${leftover} 只快筛过关但本地日K库尚未收录，不是硬规则判不合格。请挂机跑 npm run kline:warm（腾讯/新浪分片、限速、可中断续跑）；盘中刷新只读库，不批量打公开源。`;
 }

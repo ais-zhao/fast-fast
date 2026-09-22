@@ -52,6 +52,9 @@ export type DeskScanStats = {
   passed: number;
   shortlisted?: number;
   listVia?: string;
+  fromCache?: number;
+  cacheOk?: number;
+  cacheTotal?: number;
   skipped: Partial<Record<string, number>>;
   samples?: { code: string; name: string; reason: string }[];
 };

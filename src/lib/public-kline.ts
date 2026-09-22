@@ -42,26 +42,27 @@ function toBar(raw: unknown, prevClose?: number): DailyBar | null {
 }
 
 export async function fetchDailyKline(code: string, signal?: AbortSignal): Promise<StockKline | null> {
-  const symbol = tencentSymbol(code);
-  type KlineJson = {
-    data?: Record<string, { qfqday?: unknown[]; day?: unknown[]; qt?: Record<string, string[]> }>;
-  };
-  let json: KlineJson | null = null;
-
   if (typeof window === "undefined") {
-    const { fetchTencentRaw } = await import("@/lib/tencent-upstream");
-    const got = await fetchTencentRaw(code, signal);
-    if (!("json" in got)) return null;
-    json = got.json as KlineJson;
-  } else {
-    const response = await fetch(`/api/kline?code=${encodeURIComponent(code)}`, {
-      signal,
-      cache: "no-store",
-    });
-    if (!response.ok) return null;
-    json = (await response.json()) as KlineJson;
+    const { loadKlineFromStore } = await import("@/lib/kline-store");
+    const cached = loadKlineFromStore(code);
+    if (cached) return cached;
+    const { fetchKlineSharded } = await import("@/lib/kline-sources");
+    const { upsertKline } = await import("@/lib/kline-store");
+    const got = await fetchKlineSharded(code, signal);
+    if (!got.ok) return null;
+    upsertKline(got.kline, got.via);
+    return got.kline;
   }
 
+  const response = await fetch(`/api/kline?code=${encodeURIComponent(code)}`, {
+    signal,
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  const json = (await response.json()) as {
+    data?: Record<string, { qfqday?: unknown[]; day?: unknown[]; qt?: Record<string, string[]> }>;
+  };
+  const symbol = tencentSymbol(code);
   const row = json?.data?.[symbol];
   const raw = row?.qfqday ?? row?.day ?? [];
   if (raw.length < 12) return null;
