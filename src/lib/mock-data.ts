@@ -1,6 +1,6 @@
 import { formatMonthDay, sessionMeta } from "@/lib/market";
 import { synthOhlc } from "@/lib/quotes";
-import { MAX_CANDIDATES } from "@/lib/scan-rules";
+import { MAX_CANDIDATES } from "@/lib/scan-constants";
 import type { Candidate, DeskPayload, QuoteBook } from "@/lib/types";
 
 type MockSeed = Omit<Candidate, "bar" | "sourceUrl">;
@@ -188,8 +188,18 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
     quotes,
     scanStats:
       scene === "empty"
-        ? { pool: 40, fetched: 40, passed: 0, skipped: { extended: 12, rr: 9, "volume-climax": 6 } }
-        : { pool: 40, fetched: 40, passed: candidates.length, skipped: { extended: 8, rr: 7 } },
+        ? {
+            pool: 40,
+            fetched: 40,
+            passed: 0,
+            skipped: { extended: 12, rr: 9, "volume-climax": 6 },
+            samples: [
+              { code: "601012", name: "隆基绿能", reason: "extended" },
+              { code: "300059", name: "东方财富", reason: "rr" },
+              { code: "601138", name: "工业富联", reason: "volume-climax" },
+            ],
+          }
+        : { pool: 40, fetched: 40, passed: candidates.length, skipped: { extended: 8, rr: 7 }, samples: [] },
   };
 }
 

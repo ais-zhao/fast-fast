@@ -51,6 +51,7 @@ export type DeskScanStats = {
   fetched: number;
   passed: number;
   skipped: Partial<Record<string, number>>;
+  samples?: { code: string; name: string; reason: string }[];
 };
 
 export type DeskPayload = {

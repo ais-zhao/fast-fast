@@ -31,19 +31,19 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       try {
         const kline = await fetchDailyKline(item.code, controller.signal);
         if (!kline) {
-          bumpSkip(stats, "fetch-fail");
+          bumpSkip(stats, "fetch-fail", { code: item.code, name: item.code });
           return { kline: null, candidate: null };
         }
         stats.fetched += 1;
         const evaluated = evaluateSetup(kline, item.board);
         if (!evaluated.ok) {
-          bumpSkip(stats, evaluated.reason);
+          bumpSkip(stats, evaluated.reason, { code: kline.code, name: kline.name });
           return { kline, candidate: null };
         }
         stats.passed += 1;
         return { kline, candidate: evaluated.candidate };
       } catch {
-        bumpSkip(stats, "fetch-fail");
+        bumpSkip(stats, "fetch-fail", { code: item.code, name: item.code });
         return { kline: null, candidate: null };
       }
     });

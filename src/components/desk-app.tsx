@@ -19,7 +19,7 @@ import { usePaperAccount } from "@/hooks/use-paper-account";
 import { getDeskPayload } from "@/lib/mock-data";
 import { formatMonthDay, nextTradingDay } from "@/lib/market";
 import { latestQuoteDate } from "@/lib/quotes";
-import { MAX_CANDIDATES, topSkipLines } from "@/lib/scan-rules";
+import { MAX_CANDIDATES, SKIP_COPY, topSkipLines, type ScanSkipReason } from "@/lib/scan-constants";
 import { advanceSession, tryClosePosition, tryOpenPosition } from "@/lib/paper";
 import type { Candidate, DeskPayload, ExitReason, MarketScene, MarkContext, QuoteBook } from "@/lib/types";
 import { CircleAlert, RefreshCw } from "lucide-react";
@@ -338,6 +338,16 @@ function EmptyCandidates({
           观察池 {scanStats.pool} 只 · 拉到日K {scanStats.fetched} 只 · 通过 {scanStats.passed} 只
           {skipHint ? `。主要挡掉：${skipHint}` : ""}。
         </p>
+      ) : null}
+      {scanStats?.samples && scanStats.samples.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-xs leading-5 text-muted-foreground">
+          {scanStats.samples.slice(0, 5).map((sample) => (
+            <li key={sample.code}>
+              {sample.name} {sample.code} ·{" "}
+              {SKIP_COPY[sample.reason as ScanSkipReason] ?? sample.reason}
+            </li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );

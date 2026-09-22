@@ -1,4 +1,4 @@
-import { HARD_RULE_LINES, MAX_CANDIDATES } from "@/lib/scan-rules";
+import { HARD_RULE_LINES, MAX_CANDIDATES } from "@/lib/scan-constants";
 
 export function HardRulesNote() {
   return (
