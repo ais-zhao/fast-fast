@@ -19,7 +19,6 @@ import { getDeskPayload } from "@/lib/mock-data";
 import { formatMonthDay, nextTradingDay } from "@/lib/market";
 import { latestQuoteDate } from "@/lib/quotes";
 import { advanceSession, tryClosePosition, tryOpenPosition } from "@/lib/paper";
-import { scanDelayedDesk } from "@/lib/scan";
 import type { Candidate, DeskPayload, ExitReason, MarketScene, MarkContext, QuoteBook } from "@/lib/types";
 import { CircleAlert, RefreshCw } from "lucide-react";
 
@@ -39,7 +38,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
 
   useEffect(() => {
     void load("ok", false);
-    // Browser fetches Tencent klines after mount; first paint is an empty loading state.
+    // First paint is empty; the browser only talks to /api/desk, which pulls Tencent server-side.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only fetch
   }, []);
 
@@ -54,19 +53,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
         setLoadState("ready");
         return;
       }
-      const heldCodes = paper.positions.map((item) => item.code);
-      if (nextScene === "ok") {
-        try {
-          const next = await scanDelayedDesk(heldCodes);
-          setPayload(next);
-          setQuotes(next.quotes ?? {});
-          setLoadState("ready");
-          return;
-        } catch {
-          // Fall through to the server proxy, then to offline demo.
-        }
-      }
-      const held = heldCodes.join(",");
+      const held = paper.positions.map((item) => item.code).join(",");
       const response = await fetch(`/api/desk?scene=${nextScene}&held=${held}`, { cache: "no-store" });
       if (!response.ok) {
         if (nextScene === "error") {
@@ -196,13 +183,13 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
           </Alert>
         ) : (
           <p className="text-sm text-muted-foreground">
-            {payload.sessionLabel}。数据源：浏览器直连腾讯财经日K（web.ifzq.gtimg.cn）。
+            {payload.sessionLabel}。数据源：本机服务端代拉腾讯财经日K。Chrome 直连 ifzq.gtimg.cn 会被网关 501，请在 Network 看 /api/desk。
             {payload.notice}
           </p>
         )}
         {loadState === "loading" ? (
           <p className="text-xs text-muted-foreground" role="status">
-            正在向腾讯财经拉取日K。Chrome 开发者工具 → Network，过滤 gtimg，应出现 web.ifzq.gtimg.cn。
+            正在由本机服务端向腾讯拉取日K。Chrome 里请看 /api/desk，不要等 gtimg 的 501。
           </p>
         ) : null}
         {flash ? (

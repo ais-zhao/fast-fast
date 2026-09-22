@@ -81,7 +81,8 @@ function toCandidate(kline: StockKline, board: Board): Candidate | null {
     suggestedStopPct: stopPct,
     suggestedHoldDays: holdDays,
     bar: toOhlcBar(lastBar),
-    sourceUrl: tencentKlineUrl(kline.code),
+    sourceUrl: `/api/kline?code=${kline.code}`,
+    upstreamUrl: tencentKlineUrl(kline.code),
   };
 }
 
@@ -129,7 +130,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
     const notice =
       candidates.length === 0
         ? "公开延迟行情已取到，但这一批观察池里没有同时满足：放量、站上均线、且不是涨停追高。空仓也是一种计划。"
-        : `候选来自浏览器直连的腾讯财经前复权日K（web.ifzq.gtimg.cn），最多 8 只。不是实时成交价，更不是投资建议。观察池约 ${SCAN_UNIVERSE.length} 只主板/创业板。点「腾讯日K原文」可核对开高低收。`;
+        : `候选来自本机服务端代拉的腾讯财经前复权日K。Chrome 直连 web.ifzq.gtimg.cn 常会 501，所以 Network 请看 /api/desk 和「同源日K JSON」。不是实时成交价，更不是投资建议。`;
 
     const quotes: QuoteBook = {};
     const keep = new Set([...candidates.map((item) => item.code), ...heldCodes]);

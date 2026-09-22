@@ -43,15 +43,13 @@ function toBar(raw: unknown, prevClose?: number): DailyBar | null {
 
 export async function fetchDailyKline(code: string, signal?: AbortSignal): Promise<StockKline | null> {
   const symbol = tencentSymbol(code);
-  const url = tencentKlineUrl(code);
+  // Chrome XHR to ifzq.gtimg.cn often returns 501; the Node proxy does not.
+  const url =
+    typeof window === "undefined" ? tencentKlineUrl(code) : `/api/kline?code=${encodeURIComponent(code)}`;
   const response = await fetch(url, {
     signal,
     cache: "no-store",
-    mode: "cors",
-    headers: {
-      Accept: "*/*",
-      ...(typeof window === "undefined" ? { "User-Agent": "Mozilla/5.0" } : {}),
-    },
+    headers: typeof window === "undefined" ? { Accept: "*/*", "User-Agent": "Mozilla/5.0" } : undefined,
   });
   if (!response.ok) return null;
   const json = (await response.json()) as {

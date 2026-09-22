@@ -37,6 +37,7 @@ export type Candidate = {
   suggestedHoldDays: number;
   bar: OhlcBar;
   sourceUrl: string;
+  upstreamUrl?: string;
 };
 
 export type DeskPayload = {

@@ -234,6 +234,6 @@ export function loadingDeskPayload(): DeskPayload {
     quotes: {},
     dataSource: "delayed-public",
     notice:
-      "正在由浏览器向腾讯财经（web.ifzq.gtimg.cn）拉取前复权日K。打开 Chrome 网络面板，过滤 gtimg，就能看到外网请求。首屏不再塞模拟名单。",
+      "正在由本机服务端向腾讯财经拉取前复权日K。Chrome 直连 gtimg 会 501，请看 /api/desk。首屏不再塞模拟名单。",
   };
 }

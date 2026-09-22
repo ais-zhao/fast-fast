@@ -58,16 +58,24 @@ export function CandidateCard({
       <CardContent className="flex flex-col gap-2">
         <OhlcStrip bar={candidate.bar} />
         {candidate.sourceUrl ? (
-          <a
-            href={candidate.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            腾讯日K原文 · {candidate.bar.date}
-          </a>
+          <p className="text-xs text-muted-foreground">
+            <a
+              href={candidate.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-2 hover:underline"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              同源日K JSON · {candidate.bar.date}
+            </a>
+            {candidate.upstreamUrl ? (
+              <>
+                {" · "}
+                <span className="break-all">上游 ifzq.gtimg.cn，浏览器直连常 501，请用 curl 或同源 JSON</span>
+              </>
+            ) : null}
+          </p>
         ) : (
           <p className="text-xs text-muted-foreground">离线演示 K 线，不是腾讯原文。</p>
         )}
