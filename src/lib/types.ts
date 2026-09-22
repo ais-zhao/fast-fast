@@ -2,6 +2,8 @@ export type Board = "主板" | "创业板";
 
 export type MarketScene = "ok" | "empty" | "error";
 
+export type DataSource = "delayed-public" | "offline-demo";
+
 export type Candidate = {
   code: string;
   name: string;
@@ -27,6 +29,7 @@ export type DeskPayload = {
   sessionLabel: string;
   candidates: Candidate[];
   notice: string;
+  dataSource: DataSource;
 };
 
 export type ExitReason = "stop" | "time" | "manual";

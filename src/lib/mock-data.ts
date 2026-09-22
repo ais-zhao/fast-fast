@@ -206,5 +206,6 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
     sessionLabel: meta.sessionLabel,
     candidates,
     notice,
+    dataSource: "offline-demo" as const,
   };
 }

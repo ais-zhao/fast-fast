@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CapitalBar } from "@/components/capital-bar";
 import {
   CandidateList,
@@ -34,6 +34,10 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
 
   const { state: paper, setState: setPaper, reset } = usePaperAccount(payload.planFor);
 
+  useEffect(() => {
+    void load("ok", false);
+  }, []);
+
   async function load(nextScene: MarketScene, nextOffline: boolean) {
     setLoadState("loading");
     setError(null);
@@ -45,19 +49,27 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
       }
       const response = await fetch(`/api/desk?scene=${nextScene}`, { cache: "no-store" });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? "行情源暂时不可用。");
-        setPayload((current) => ({ ...current, candidates: [] }));
-        setLoadState("error");
+        if (nextScene === "error") {
+          const body = (await response.json().catch(() => null)) as { error?: string } | null;
+          setError(body?.error ?? "行情源暂时不可用。");
+          setPayload((current) => ({ ...current, candidates: [] }));
+          setLoadState("error");
+          return;
+        }
+        const fallback = getDeskPayload("ok");
+        fallback.notice = "公开延迟行情暂不可用，已改用离线演示数据。不是实时行情，也不是投资建议。";
+        setPayload(fallback);
+        setLoadState("ready");
         return;
       }
       const next = (await response.json()) as DeskPayload;
       setPayload(next);
       setLoadState("ready");
     } catch {
-      setError("连不上演示行情接口。可以用离线数据继续走完看候选、写计划、模拟成交。");
-      setPayload((current) => ({ ...current, candidates: [] }));
-      setLoadState("error");
+      const fallback = getDeskPayload("ok");
+      fallback.notice = "连不上公开行情接口，已改用离线演示。纸上推演可以继续。";
+      setPayload(fallback);
+      setLoadState("ready");
     }
   }
 
@@ -143,9 +155,16 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
         </div>
         <DisclaimerBanner />
         <p className="text-sm text-muted-foreground">
-          {payload.sessionLabel}。{payload.notice}
-          {offline ? " 当前使用离线演示数据。" : ""}
+          {payload.sessionLabel}。
+          {payload.dataSource === "delayed-public" ? "数据源：公开延迟行情。" : "数据源：离线演示。"}
+          {payload.notice}
+          {offline ? " 已锁定离线演示。" : ""}
         </p>
+        {loadState === "loading" ? (
+          <p className="text-xs text-muted-foreground" role="status">
+            正在拉取公开延迟行情…
+          </p>
+        ) : null}
         {flash ? (
           <p className="rounded-lg bg-secondary px-3 py-2 text-sm" role="status">
             {flash}
@@ -264,7 +283,7 @@ function EmptyCandidates({ planFor }: { planFor?: string }) {
       <h3 className="font-medium">这一批没有可做的票</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         {planFor ? `${formatMonthDay(planFor)} 的` : ""}
-        模拟扫描没有找出符合规则的标的：近几日放量、站上短期均线、而且不是涨停追高。空仓也是一种计划，不必硬找。
+        扫描没有找出符合规则的标的：近几日放量、站上短期均线、而且不是涨停追高。空仓也是一种计划，不必硬找。
       </p>
     </div>
   );
