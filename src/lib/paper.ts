@@ -1,5 +1,5 @@
 import { formatMonthDay, nextTradingDay, tradingDaysBetween } from "@/lib/market";
-import { markPrice } from "@/lib/quotes";
+import { delayedStopTouched, markForPosition } from "@/lib/quotes";
 import {
   TOTAL_CAPITAL,
   buyBlockCopy,
@@ -7,7 +7,7 @@ import {
   clampHoldDays,
   round2,
 } from "@/lib/rules";
-import type { Candidate, ExitReason, PaperPosition, PaperState } from "@/lib/types";
+import type { Candidate, ExitReason, MarkContext, PaperPosition, PaperState } from "@/lib/types";
 
 export const STORAGE_KEY = "swing-desk-paper-v1";
 
@@ -24,9 +24,9 @@ export function investedAmount(state: PaperState): number {
   return round2(state.positions.reduce((sum, pos) => sum + pos.cost, 0));
 }
 
-export function equity(state: PaperState): number {
+export function equity(state: PaperState, ctx?: MarkContext): number {
   const openValue = state.positions.reduce((sum, pos) => {
-    const mark = markPrice(pos.code, pos.entryPrice, pos.openedOn, state.sessionDate);
+    const mark = markForPosition(pos, state.sessionDate, ctx);
     return sum + mark * pos.shares;
   }, 0);
   return round2(state.cash + openValue);
@@ -80,8 +80,12 @@ export function tryOpenPosition(
   };
 }
 
-export function currentMark(position: PaperPosition, sessionDate: string): number {
-  return markPrice(position.code, position.entryPrice, position.openedOn, sessionDate);
+export function currentMark(
+  position: PaperPosition,
+  sessionDate: string,
+  ctx?: MarkContext,
+): number {
+  return markForPosition(position, sessionDate, ctx);
 }
 
 export function heldTradingDays(position: PaperPosition, sessionDate: string): number {
@@ -92,14 +96,26 @@ export function isTPlusOneLocked(position: PaperPosition, sessionDate: string): 
   return position.openedOn === sessionDate;
 }
 
-export function stopWouldHit(position: PaperPosition, sessionDate: string): boolean {
-  return currentMark(position, sessionDate) <= position.stopPrice;
+export function stopWouldHit(
+  position: PaperPosition,
+  sessionDate: string,
+  ctx?: MarkContext,
+): boolean {
+  if (ctx?.dataSource === "delayed-public") {
+    if (
+      delayedStopTouched(ctx.quotes[position.code], position.openedOn, sessionDate, position.stopPrice)
+    ) {
+      return true;
+    }
+  }
+  return currentMark(position, sessionDate, ctx) <= position.stopPrice;
 }
 
 export function tryClosePosition(
   state: PaperState,
   positionId: string,
   exitReason: ExitReason,
+  ctx?: MarkContext,
 ): { state: PaperState; error?: string } {
   const position = state.positions.find((item) => item.id === positionId);
   if (!position) return { state, error: "找不到这笔持仓。" };
@@ -110,7 +126,7 @@ export function tryClosePosition(
     };
   }
 
-  const exitPrice = currentMark(position, state.sessionDate);
+  const exitPrice = currentMark(position, state.sessionDate, ctx);
   const heldDays = heldTradingDays(position, state.sessionDate);
   const pnl = round2((exitPrice - position.entryPrice) * position.shares);
   const disciplineBreaks: string[] = [];
@@ -134,7 +150,7 @@ export function tryClosePosition(
     reviewNotes.push(
       `按计划到期离场：计划 ${position.plannedHoldDays} 天，实际持有 ${heldDays} 个交易日。`,
     );
-    if (stopWouldHit(position, state.sessionDate)) {
+    if (stopWouldHit(position, state.sessionDate, ctx)) {
       reviewNotes.push("到期时价格也已经碰到止损附近，按到期处理。");
     }
   } else {
@@ -169,11 +185,10 @@ export function tryClosePosition(
   };
 }
 
-export function advanceSession(state: PaperState): PaperState {
+export function advanceSession(state: PaperState, ctx?: MarkContext): PaperState {
   const sessionDate = nextTradingDay(state.sessionDate);
   const positions = state.positions.map((position) => {
-    const mark = currentMark({ ...position }, sessionDate);
-    if (mark <= position.stopPrice && !position.stopHitOn) {
+    if (stopWouldHit(position, sessionDate, ctx) && !position.stopHitOn) {
       return { ...position, stopHitOn: sessionDate };
     }
     return position;

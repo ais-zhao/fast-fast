@@ -32,7 +32,7 @@ export function CandidateListSkeleton() {
   return (
     <div className="flex flex-col gap-3">
       {Array.from({ length: 3 }).map((_, index) => (
-        <Skeleton key={index} className="h-24 w-full rounded-xl" />
+        <Skeleton key={index} className="h-32 w-full rounded-xl" />
       ))}
     </div>
   );

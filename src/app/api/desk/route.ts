@@ -5,9 +5,19 @@ import type { MarketScene } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+function heldCodesFrom(request: Request): string[] {
+  const url = new URL(request.url);
+  return (url.searchParams.get("held") ?? "")
+    .split(",")
+    .map((code) => code.trim())
+    .filter((code) => /^\d{6}$/.test(code))
+    .slice(0, 3);
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const scene = (url.searchParams.get("scene") ?? "ok") as MarketScene;
+  const held = heldCodesFrom(request);
 
   if (scene === "error") {
     return NextResponse.json(
@@ -24,7 +34,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    return NextResponse.json(await scanDelayedDesk());
+    return NextResponse.json(await scanDelayedDesk(held));
   } catch {
     const fallback = getDeskPayload("ok");
     fallback.notice =

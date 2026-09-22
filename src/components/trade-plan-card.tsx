@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CandleRow, OhlcStrip } from "@/components/ohlc-strip";
 import { formatYuanPlain, lotsLabel } from "@/lib/format";
 import {
   DEFAULT_HOLD_DAYS,
@@ -27,7 +28,7 @@ import {
   suggestedLots,
   suggestedStop,
 } from "@/lib/rules";
-import type { Candidate, PaperState } from "@/lib/types";
+import type { Candidate, OhlcBar, PaperState } from "@/lib/types";
 
 function initialLots(candidate: Candidate, cash: number) {
   const nextLots = Math.max(
@@ -40,10 +41,12 @@ function initialLots(candidate: Candidate, cash: number) {
 export function TradePlanCard({
   candidate,
   paper,
+  bars,
   onBuy,
 }: {
   candidate: Candidate | null;
   paper: PaperState;
+  bars?: OhlcBar[];
   onBuy: (input: { lots: number; stopPrice: number; holdDays: number }) => string | undefined;
 }) {
   if (!candidate) {
@@ -63,16 +66,18 @@ export function TradePlanCard({
     );
   }
 
-  return <FilledPlan candidate={candidate} paper={paper} onBuy={onBuy} />;
+  return <FilledPlan candidate={candidate} paper={paper} bars={bars} onBuy={onBuy} />;
 }
 
 function FilledPlan({
   candidate,
   paper,
+  bars,
   onBuy,
 }: {
   candidate: Candidate;
   paper: PaperState;
+  bars?: OhlcBar[];
   onBuy: (input: { lots: number; stopPrice: number; holdDays: number }) => string | undefined;
 }) {
   const [lots, setLots] = useState(() => initialLots(candidate, paper.cash));
@@ -112,11 +117,15 @@ function FilledPlan({
           </span>
         </CardTitle>
         <CardDescription>
-          昨收 {candidate.last.toFixed(2)} 元 · 5 日均线 {candidate.ma5.toFixed(2)} · 10 日均线{" "}
-          {candidate.ma10.toFixed(2)}。按昨收模拟成交，仅供纸上推演。
+          这根日K收盘 {candidate.last.toFixed(2)} 元 · 5 日均线 {candidate.ma5.toFixed(2)} · 10 日均线{" "}
+          {candidate.ma10.toFixed(2)}。按这根收盘价纸上成交，不是实时委托。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2 rounded-lg bg-muted/60 px-3 py-2">
+          <OhlcStrip bar={candidate.bar} />
+          {bars && bars.length > 1 ? <CandleRow bars={bars} /> : null}
+        </div>
         <section>
           <h3 className="text-sm font-medium">为什么入选</h3>
           <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-6">
@@ -177,7 +186,7 @@ function FilledPlan({
               onChange={(event) => setStopPrice(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              相对昨收约 {(((candidate.last - plan.stop) / candidate.last) * 100).toFixed(1)}%
+              相对收盘约 {(((candidate.last - plan.stop) / candidate.last) * 100).toFixed(1)}%
               ，这笔最多大约亏 {formatYuanPlain(Math.max(0, plan.risk))}
             </p>
           </div>

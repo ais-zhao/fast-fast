@@ -4,6 +4,22 @@ export type MarketScene = "ok" | "empty" | "error";
 
 export type DataSource = "delayed-public" | "offline-demo";
 
+export type OhlcBar = {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+export type QuoteBook = Record<string, OhlcBar[]>;
+
+export type MarkContext = {
+  dataSource: DataSource;
+  quotes: QuoteBook;
+};
+
 export type Candidate = {
   code: string;
   name: string;
@@ -19,6 +35,7 @@ export type Candidate = {
   invalidateWhen: string[];
   suggestedStopPct: number;
   suggestedHoldDays: number;
+  bar: OhlcBar;
 };
 
 export type DeskPayload = {
@@ -30,6 +47,7 @@ export type DeskPayload = {
   candidates: Candidate[];
   notice: string;
   dataSource: DataSource;
+  quotes: QuoteBook;
 };
 
 export type ExitReason = "stop" | "time" | "manual";

@@ -9,17 +9,19 @@ import {
   MIN_CASH_BUFFER,
   TOTAL_CAPITAL,
 } from "@/lib/rules";
-import type { PaperState } from "@/lib/types";
+import type { MarkContext, PaperState } from "@/lib/types";
 
 export function CapitalBar({
   paper,
   sessionLabel,
+  markCtx,
 }: {
   paper: PaperState;
   sessionLabel: string;
+  markCtx?: MarkContext;
 }) {
   const used = investedAmount(paper);
-  const nav = equity(paper);
+  const nav = equity(paper, markCtx);
   const pnl = nav - TOTAL_CAPITAL;
   const maxStock = MAX_PER_STOCK * MAX_HOLDINGS;
   const usedPct = Math.min(100, Math.round((used / maxStock) * 100));
@@ -38,7 +40,13 @@ export function CapitalBar({
           label="纸上权益"
           value={formatYuanPlain(nav)}
           valueClass={pnlClass(pnl)}
-          hint={pnl === 0 ? "尚未开仓" : `相对本金 ${pnl > 0 ? "+" : ""}${formatYuanPlain(pnl).replace("¥", "")}`}
+          hint={
+            pnl === 0
+              ? "尚未开仓"
+              : markCtx?.dataSource === "delayed-public"
+                ? `按延迟收盘计价 ${pnl > 0 ? "+" : ""}${formatYuanPlain(pnl).replace("¥", "")}`
+                : `相对本金 ${pnl > 0 ? "+" : ""}${formatYuanPlain(pnl).replace("¥", "")}`
+          }
         />
         <div className="sm:col-span-2 lg:col-span-1">
           <p className="text-xs text-muted-foreground">模拟交易日</p>

@@ -1,3 +1,4 @@
+import { OhlcStrip } from "@/components/ohlc-strip";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatChangePct, formatYuan, pnlClass } from "@/lib/format";
@@ -55,6 +56,7 @@ export function CandidateCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
+        <OhlcStrip bar={candidate.bar} />
         <p className="text-sm leading-6 text-foreground/90">{candidate.reasons[0]}</p>
         <div className="flex flex-wrap gap-1.5">
           <Badge variant="outline">未涨停</Badge>

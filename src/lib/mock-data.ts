@@ -1,7 +1,10 @@
 import { formatMonthDay, sessionMeta } from "@/lib/market";
-import type { Candidate, DeskPayload } from "@/lib/types";
+import { synthOhlc } from "@/lib/quotes";
+import type { Candidate, DeskPayload, QuoteBook } from "@/lib/types";
 
-export const MOCK_CANDIDATES: Candidate[] = [
+type MockSeed = Omit<Candidate, "bar">;
+
+export const MOCK_SEEDS: MockSeed[] = [
   {
     code: "000725",
     name: "京东方A",
@@ -190,7 +193,14 @@ export const MOCK_CANDIDATES: Candidate[] = [
 
 export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
   const meta = sessionMeta();
-  const candidates = scene === "empty" ? [] : MOCK_CANDIDATES.slice(0, 8);
+  const candidates =
+    scene === "empty"
+      ? []
+      : MOCK_SEEDS.slice(0, 8).map((seed) => ({
+          ...seed,
+          bar: synthOhlc(meta.asOf, seed.last, seed.changePct),
+        }));
+  const quotes: QuoteBook = Object.fromEntries(candidates.map((item) => [item.code, [item.bar]]));
   const notice =
     scene === "empty"
       ? "模拟扫描没有找出符合规则的标的（放量、站上均线、且不是涨停追高）。空仓也是一种计划。"
@@ -207,5 +217,6 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
     candidates,
     notice,
     dataSource: "offline-demo" as const,
+    quotes,
   };
 }

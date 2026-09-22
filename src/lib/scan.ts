@@ -1,7 +1,8 @@
 import { fetchDailyKline, mapPool, type DailyBar, type StockKline } from "@/lib/public-kline";
 import { sessionMeta } from "@/lib/market";
+import { toOhlcBar } from "@/lib/quotes";
 import { MAX_PER_STOCK, round2 } from "@/lib/rules";
-import type { Board, Candidate, DeskPayload } from "@/lib/types";
+import type { Board, Candidate, DeskPayload, QuoteBook } from "@/lib/types";
 import { SCAN_UNIVERSE, limitUpThreshold } from "@/lib/universe";
 
 const LOT_SIZE = 100;
@@ -79,16 +80,26 @@ function toCandidate(kline: StockKline, board: Board): Candidate | null {
     ],
     suggestedStopPct: stopPct,
     suggestedHoldDays: holdDays,
+    bar: toOhlcBar(lastBar),
   };
 }
 
-export async function scanDelayedDesk(): Promise<DeskPayload> {
+export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPayload> {
   const meta = sessionMeta();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12_000);
+  const extraHeld = heldCodes
+    .filter((code) => /^\d{6}$/.test(code))
+    .filter((code) => !SCAN_UNIVERSE.some((item) => item.code === code))
+    .slice(0, 3)
+    .map((code) => ({
+      code,
+      board: (code.startsWith("3") ? "创业板" : "主板") as Board,
+    }));
+  const pool = [...SCAN_UNIVERSE, ...extraHeld];
 
   try {
-    const fetched = await mapPool(SCAN_UNIVERSE, 6, async (item) => {
+    const fetched = await mapPool(pool, 6, async (item) => {
       try {
         const kline = await fetchDailyKline(item.code, controller.signal);
         if (!kline) return { kline: null, candidate: null };
@@ -117,7 +128,14 @@ export async function scanDelayedDesk(): Promise<DeskPayload> {
     const notice =
       candidates.length === 0
         ? "公开延迟行情已取到，但这一批观察池里没有同时满足：放量、站上均线、且不是涨停追高。空仓也是一种计划。"
-        : `候选来自公开延迟日线（腾讯财经），最多 8 只，不是实时成交价，更不是投资建议。观察池约 ${SCAN_UNIVERSE.length} 只主板/创业板，按量价规则硬过滤。`;
+        : `候选来自公开延迟日线（腾讯财经），最多 8 只，不是实时成交价，更不是投资建议。观察池约 ${SCAN_UNIVERSE.length} 只主板/创业板，按量价规则硬过滤。每只展示最近一根开高低收。`;
+
+    const quotes: QuoteBook = {};
+    const keep = new Set([...candidates.map((item) => item.code), ...heldCodes]);
+    for (const row of fetched) {
+      if (!row.kline || !keep.has(row.kline.code)) continue;
+      quotes[row.kline.code] = row.kline.bars.slice(-20).map(toOhlcBar);
+    }
 
     return {
       asOf,
@@ -128,6 +146,7 @@ export async function scanDelayedDesk(): Promise<DeskPayload> {
       candidates,
       notice,
       dataSource: "delayed-public",
+      quotes,
     };
   } finally {
     clearTimeout(timer);

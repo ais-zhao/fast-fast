@@ -17,8 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePaperAccount } from "@/hooks/use-paper-account";
 import { getDeskPayload } from "@/lib/mock-data";
 import { formatMonthDay, nextTradingDay } from "@/lib/market";
+import { latestQuoteDate } from "@/lib/quotes";
 import { advanceSession, tryClosePosition, tryOpenPosition } from "@/lib/paper";
-import type { Candidate, DeskPayload, ExitReason, MarketScene } from "@/lib/types";
+import type { Candidate, DeskPayload, ExitReason, MarketScene, MarkContext, QuoteBook } from "@/lib/types";
 import { CircleAlert, RefreshCw } from "lucide-react";
 
 type LoadState = "loading" | "ready" | "error";
@@ -29,6 +30,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
   const [loadState, setLoadState] = useState<LoadState>("ready");
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<DeskPayload>(initialPayload);
+  const [quotes, setQuotes] = useState<QuoteBook>(initialPayload.quotes ?? {});
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -36,6 +38,8 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
 
   useEffect(() => {
     void load("ok", false);
+    // First paint uses SSR mock; delayed scan runs once after mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only fetch
   }, []);
 
   async function load(nextScene: MarketScene, nextOffline: boolean) {
@@ -43,11 +47,14 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
     setError(null);
     try {
       if (nextOffline) {
-        setPayload(getDeskPayload("ok"));
+        const offlinePayload = getDeskPayload("ok");
+        setPayload(offlinePayload);
+        setQuotes(offlinePayload.quotes);
         setLoadState("ready");
         return;
       }
-      const response = await fetch(`/api/desk?scene=${nextScene}`, { cache: "no-store" });
+      const held = paper.positions.map((item) => item.code).join(",");
+      const response = await fetch(`/api/desk?scene=${nextScene}&held=${held}`, { cache: "no-store" });
       if (!response.ok) {
         if (nextScene === "error") {
           const body = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -59,16 +66,19 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
         const fallback = getDeskPayload("ok");
         fallback.notice = "公开延迟行情暂不可用，已改用离线演示数据。不是实时行情，也不是投资建议。";
         setPayload(fallback);
+        setQuotes(fallback.quotes);
         setLoadState("ready");
         return;
       }
       const next = (await response.json()) as DeskPayload;
       setPayload(next);
+      setQuotes(next.quotes ?? {});
       setLoadState("ready");
     } catch {
       const fallback = getDeskPayload("ok");
       fallback.notice = "连不上公开行情接口，已改用离线演示。纸上推演可以继续。";
       setPayload(fallback);
+      setQuotes(fallback.quotes);
       setLoadState("ready");
     }
   }
@@ -82,6 +92,11 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
     [paper],
   );
 
+  const markCtx = useMemo<MarkContext>(
+    () => ({ dataSource: payload.dataSource, quotes }),
+    [payload.dataSource, quotes],
+  );
+
   function selectCandidate(code: string) {
     setSelectedCode(code);
     const plan = document.getElementById("trade-plan");
@@ -93,12 +108,15 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
     const result = tryOpenPosition(paper, selected, input.lots, input.stopPrice, input.holdDays);
     if (result.error) return result.error;
     setPaper(result.state);
-    setFlash(`${selected.name} 已按计划记入纸上持仓，不是真实委托。`);
+    if (!quotes[selected.code] && selected.bar) {
+      setQuotes((current) => ({ ...current, [selected.code]: [selected.bar] }));
+    }
+    setFlash(`${selected.name} 已按计划记入纸上持仓，按这根日K收盘计价，不是真实委托。`);
     return undefined;
   }
 
   function handleClose(id: string, reason: ExitReason) {
-    const result = tryClosePosition(paper, id, reason);
+    const result = tryClosePosition(paper, id, reason, markCtx);
     if (result.error) {
       setFlash(result.error);
       return result.error;
@@ -156,7 +174,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
         <DisclaimerBanner />
         <p className="text-sm text-muted-foreground">
           {payload.sessionLabel}。
-          {payload.dataSource === "delayed-public" ? "数据源：公开延迟行情。" : "数据源：离线演示。"}
+          {payload.dataSource === "delayed-public" ? "数据源：公开延迟行情，持仓按日K收盘计价。" : "数据源：离线演示。"}
           {payload.notice}
           {offline ? " 已锁定离线演示。" : ""}
         </p>
@@ -173,7 +191,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
       </header>
 
       {paper ? (
-        <CapitalBar paper={paper} sessionLabel={payload.sessionLabel} />
+        <CapitalBar paper={paper} sessionLabel={payload.sessionLabel} markCtx={markCtx} />
       ) : (
         <CapitalBarSkeleton />
       )}
@@ -242,6 +260,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
             key={selected?.code ?? "empty"}
             candidate={selected}
             paper={paper}
+            bars={selected ? quotes[selected.code] : undefined}
             onBuy={handleBuy}
           />
           <Tabs defaultValue="positions">
@@ -252,12 +271,20 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
             <TabsContent value="positions" className="pt-3">
               <PositionsPanel
                 paper={paper}
+                markCtx={markCtx}
                 onClose={handleClose}
                 onAdvance={() => {
                   const next = nextTradingDay(paper.sessionDate);
-                  setPaper((current) => advanceSession(current));
+                  setPaper((current) => advanceSession(current, markCtx));
+                  const quoteAsOf = latestQuoteDate(markCtx);
                   setFlash(
-                    `已进入 ${formatMonthDay(next)}。盯盘价按模拟路径更新；若碰到止损，请按计划离场。`,
+                    payload.dataSource === "delayed-public"
+                      ? `已进入 ${formatMonthDay(next)}，T+1 已解锁。${
+                          quoteAsOf && next > quoteAsOf
+                            ? `公开日K只到 ${formatMonthDay(quoteAsOf)}，浮盈仍按这根收盘计，不会再编涨跌。`
+                            : "浮盈按对应那根日K收盘计。"
+                        }`
+                      : `已进入 ${formatMonthDay(next)}。盯盘价按离线演示路径更新；若碰到止损，请按计划离场。`,
                   );
                 }}
               />

@@ -11,14 +11,17 @@ import {
   isTPlusOneLocked,
   stopWouldHit,
 } from "@/lib/paper";
-import type { ExitReason, PaperPosition, PaperState } from "@/lib/types";
+import { barOnOrBefore } from "@/lib/quotes";
+import type { ExitReason, MarkContext, PaperPosition, PaperState } from "@/lib/types";
 
 export function PositionsPanel({
   paper,
+  markCtx,
   onClose,
   onAdvance,
 }: {
   paper: PaperState;
+  markCtx?: MarkContext;
   onClose: (id: string, reason: ExitReason) => string | undefined;
   onAdvance: () => void;
 }) {
@@ -30,7 +33,7 @@ export function PositionsPanel({
           <CardDescription>还没有纸上持仓。从候选里选一只，写完计划再开仓。</CardDescription>
         </CardHeader>
         <CardContent className="text-sm leading-6 text-muted-foreground">
-          同时最多 3 只。买入后会按 T+1 锁住，必须进入下一交易日才能卖。收盘可用下面的按钮推进日期，对照止损和持有天数。
+          同时最多 3 只。买入后会按 T+1 锁住，必须进入下一交易日才能卖。公开延迟行情下，浮盈跟最新一根日K走。
         </CardContent>
       </Card>
     );
@@ -43,7 +46,9 @@ export function PositionsPanel({
           <div>
             <CardTitle>模拟持仓</CardTitle>
             <CardDescription>
-              盯盘价随「下一交易日」变动，仍是模拟数据。跌破止损请按计划走，不要拖。
+              {markCtx?.dataSource === "delayed-public"
+                ? "浮盈按公开延迟日K收盘计价。进入下一交易日会解锁 T+1；若还没有更新的一根K，价格不会再编一条模拟涨跌。"
+                : "盯盘价随「下一交易日」变动，这是离线演示路径。跌破止损请按计划走，不要拖。"}
             </CardDescription>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={onAdvance}>
@@ -57,6 +62,7 @@ export function PositionsPanel({
             key={position.id}
             position={position}
             sessionDate={paper.sessionDate}
+            markCtx={markCtx}
             onClose={onClose}
           />
         ))}
@@ -68,18 +74,21 @@ export function PositionsPanel({
 function OpenPositionRow({
   position,
   sessionDate,
+  markCtx,
   onClose,
 }: {
   position: PaperPosition;
   sessionDate: string;
+  markCtx?: MarkContext;
   onClose: (id: string, reason: ExitReason) => string | undefined;
 }) {
-  const mark = currentMark(position, sessionDate);
+  const mark = currentMark(position, sessionDate, markCtx);
   const pnl = (mark - position.entryPrice) * position.shares;
   const held = heldTradingDays(position, sessionDate);
   const locked = isTPlusOneLocked(position, sessionDate);
-  const stopHit = stopWouldHit(position, sessionDate) || Boolean(position.stopHitOn);
+  const stopHit = stopWouldHit(position, sessionDate, markCtx) || Boolean(position.stopHitOn);
   const overtime = held > position.plannedHoldDays;
+  const markBar = barOnOrBefore(markCtx?.quotes[position.code], sessionDate);
 
   return (
     <div className="rounded-lg border bg-background p-3">
@@ -102,6 +111,11 @@ function OpenPositionRow({
             {pnl >= 0 ? "+" : ""}
             {formatYuan(pnl)}
           </p>
+          {markBar && markCtx?.dataSource === "delayed-public" ? (
+            <p className="text-[11px] text-muted-foreground">
+              {formatMonthDay(markBar.date)} 收 {markBar.close.toFixed(2)}
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
