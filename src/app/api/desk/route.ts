@@ -35,10 +35,10 @@ export async function GET(request: Request) {
 
   try {
     return NextResponse.json(await scanDelayedDesk(held));
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "扫描失败";
     const fallback = getDeskPayload("ok");
-    fallback.notice =
-      "公开延迟行情暂不可用，已自动改用离线演示数据。不是实时行情，也不是投资建议。";
+    fallback.notice = `腾讯日K没拉到（${reason}），已改用离线演示。请 git pull 后重启 npm run dev，浏览器打开 /api/kline?code=000001：200 才是代拉成功。curl 能通、页面仍离线，通常是 Node 被网关 501，新版本会再试 curl。`;
     return NextResponse.json(fallback);
   }
 }

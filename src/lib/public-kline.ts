@@ -43,22 +43,26 @@ function toBar(raw: unknown, prevClose?: number): DailyBar | null {
 
 export async function fetchDailyKline(code: string, signal?: AbortSignal): Promise<StockKline | null> {
   const symbol = tencentSymbol(code);
-  // Chrome XHR to ifzq.gtimg.cn often returns 501; the Node proxy does not.
-  const url =
-    typeof window === "undefined" ? tencentKlineUrl(code) : `/api/kline?code=${encodeURIComponent(code)}`;
-  const response = await fetch(url, {
-    signal,
-    cache: "no-store",
-    headers: typeof window === "undefined" ? { Accept: "*/*", "User-Agent": "Mozilla/5.0" } : undefined,
-  });
-  if (!response.ok) return null;
-  const json = (await response.json()) as {
-    data?: Record<
-      string,
-      { qfqday?: unknown[]; day?: unknown[]; qt?: Record<string, string[]> }
-    >;
+  type KlineJson = {
+    data?: Record<string, { qfqday?: unknown[]; day?: unknown[]; qt?: Record<string, string[]> }>;
   };
-  const row = json.data?.[symbol];
+  let json: KlineJson | null = null;
+
+  if (typeof window === "undefined") {
+    const { fetchTencentRaw } = await import("@/lib/tencent-upstream");
+    const got = await fetchTencentRaw(code, signal);
+    if (!("json" in got)) return null;
+    json = got.json as KlineJson;
+  } else {
+    const response = await fetch(`/api/kline?code=${encodeURIComponent(code)}`, {
+      signal,
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    json = (await response.json()) as KlineJson;
+  }
+
+  const row = json?.data?.[symbol];
   const raw = row?.qfqday ?? row?.day ?? [];
   if (raw.length < 12) return null;
   const bars: DailyBar[] = [];

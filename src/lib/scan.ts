@@ -89,7 +89,7 @@ function toCandidate(kline: StockKline, board: Board): Candidate | null {
 export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPayload> {
   const meta = sessionMeta();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), 20_000);
   const extraHeld = heldCodes
     .filter((code) => /^\d{6}$/.test(code))
     .filter((code) => !SCAN_UNIVERSE.some((item) => item.code === code))
@@ -101,7 +101,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
   const pool = [...SCAN_UNIVERSE, ...extraHeld];
 
   try {
-    const fetched = await mapPool(pool, 6, async (item) => {
+    const fetched = await mapPool(pool, 8, async (item) => {
       try {
         const kline = await fetchDailyKline(item.code, controller.signal);
         if (!kline) return { kline: null, candidate: null };
@@ -113,7 +113,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
 
     const gotBars = fetched.filter((row) => row.kline).length;
     if (gotBars < 5) {
-      throw new Error("delayed-quotes-insufficient");
+      throw new Error(`只拉到 ${gotBars} 只日K，不足 5 只。本机请打开 /api/kline?code=000001`);
     }
 
     const candidates = fetched

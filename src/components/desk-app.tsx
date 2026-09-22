@@ -64,7 +64,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
           return;
         }
         const fallback = getDeskPayload("ok");
-        fallback.notice = "公开延迟行情暂不可用，已改用离线演示数据。不是实时行情，也不是投资建议。";
+        fallback.notice = "公开延迟行情暂不可用，已改用离线演示数据。请打开 /api/kline?code=000001 看上游是否 200。";
         setPayload(fallback);
         setQuotes(fallback.quotes);
         setLoadState("ready");
@@ -76,7 +76,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
       setLoadState("ready");
     } catch {
       const fallback = getDeskPayload("ok");
-      fallback.notice = "连不上公开行情接口，已改用离线演示。纸上推演可以继续。";
+      fallback.notice = "连不上本机 /api/desk，已改用离线演示。确认开发服务在 43127 且已 git pull。";
       setPayload(fallback);
       setQuotes(fallback.quotes);
       setLoadState("ready");
