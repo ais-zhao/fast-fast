@@ -47,10 +47,11 @@ export async function fetchDailyKline(code: string, signal?: AbortSignal): Promi
   const response = await fetch(url, {
     signal,
     cache: "no-store",
-    headers:
-      typeof window === "undefined"
-        ? { "User-Agent": "Mozilla/5.0" }
-        : undefined,
+    mode: "cors",
+    headers: {
+      Accept: "*/*",
+      ...(typeof window === "undefined" ? { "User-Agent": "Mozilla/5.0" } : {}),
+    },
   });
   if (!response.ok) return null;
   const json = (await response.json()) as {

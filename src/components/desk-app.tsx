@@ -185,14 +185,21 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
           </div>
         </div>
         <DisclaimerBanner />
-        <p className="text-sm text-muted-foreground">
-          {payload.sessionLabel}。
-          {payload.dataSource === "delayed-public"
-            ? "数据源：浏览器直连腾讯财经日K（web.ifzq.gtimg.cn）。"
-            : "数据源：离线演示，不是腾讯行情。"}
-          {payload.notice}
-          {offline ? " 已锁定离线演示。" : ""}
-        </p>
+        {payload.dataSource === "offline-demo" ? (
+          <Alert variant="destructive" className="border-destructive bg-destructive/10 text-destructive">
+            <CircleAlert />
+            <AlertTitle>已改用离线演示</AlertTitle>
+            <AlertDescription className="text-destructive">
+              {payload.sessionLabel}。数据源：离线演示，不是腾讯行情。{payload.notice}
+              {offline ? " 已锁定离线演示。" : ""}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {payload.sessionLabel}。数据源：浏览器直连腾讯财经日K（web.ifzq.gtimg.cn）。
+            {payload.notice}
+          </p>
+        )}
         {loadState === "loading" ? (
           <p className="text-xs text-muted-foreground" role="status">
             正在向腾讯财经拉取日K。Chrome 开发者工具 → Network，过滤 gtimg，应出现 web.ifzq.gtimg.cn。
