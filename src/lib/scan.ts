@@ -47,7 +47,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       shortlist.push(row);
     }
 
-    if (listed?.via === "eastmoney" && listed.total > listed.scanned) {
+    if ((listed?.via === "eastmoney" || listed?.via === "akshare") && listed.total > listed.scanned) {
       bumpSkipCount(stats, "volume-low", listed.total - listed.scanned);
     }
 
@@ -112,7 +112,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
     let klineReviewed = takeKlineSlice(0);
 
     const reviewTargets = async (items: SnapshotQuote[]) =>
-      mapPool(items, 8, async (item) => {
+      mapPool(items, 12, async (item) => {
         try {
           const kline = await fetchDailyKline(item.code, controller.signal);
           if (!kline) {
@@ -160,7 +160,13 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       }, meta.asOf);
     const skipHint = topSkipLines(stats);
     const listLabel =
-      stats.listVia === "eastmoney" ? "东方财富快照" : stats.listVia === "sina" ? "新浪行情列表" : "40 只备用池";
+      stats.listVia === "akshare"
+        ? "AKShare 快照"
+        : stats.listVia === "eastmoney"
+          ? "东方财富快照"
+          : stats.listVia === "sina"
+            ? "新浪行情列表"
+            : "40 只备用池";
     const notice =
       candidates.length === 0
         ? `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，日K复核 ${stats.fetched} 只，硬规则一只都没放过。${

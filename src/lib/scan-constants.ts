@@ -54,7 +54,7 @@ export const SKIP_COPY: Record<ScanSkipReason, string> = {
 };
 
 export const HARD_RULE_LINES = [
-  "先扫沪深A股全市场快照，北交所和 B 股不要；再对进入日K复核的票过硬规则",
+  "先扫沪深A股全市场快照（优先 AKShare 腾讯快照，带量比），北交所和 B 股不要；再对进入日K复核的票过硬规则",
   "一手不超过 2 万；ST、涨停、一字板不要",
   "量比 1.2～2.8，爆量高潮不要",
   "收盘站上 5 日和 10 日线，且 5 日线不低于 10 日线",
@@ -70,7 +70,7 @@ export type ScanStats = {
   fetched: number;
   passed: number;
   shortlisted: number;
-  listVia: "eastmoney" | "sina" | "fallback-40";
+  listVia: "akshare" | "eastmoney" | "sina" | "fallback-40";
   skipped: Partial<Record<ScanSkipReason, number>>;
   samples: { code: string; name: string; reason: ScanSkipReason }[];
 };

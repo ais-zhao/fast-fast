@@ -36,11 +36,7 @@ export function snapshotScore(row: SnapshotQuote): number {
   const tr = row.turnoverRatio;
   const vrScore =
     vr != null
-      ? vr >= 1.2 && vr <= 1.7
-        ? 1
-        : vr > 1.7 && vr <= 2.2
-          ? 0.55
-          : 0.2
+      ? 1 - Math.min(1, Math.abs(vr - 1.38) / 0.7)
       : tr != null
         ? 1 - Math.min(1, Math.abs(tr - 3.5) / 5)
         : 0.4;

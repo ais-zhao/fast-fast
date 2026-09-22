@@ -1,5 +1,6 @@
 import "server-only";
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 import { mapPool, tencentSymbol } from "@/lib/public-kline";
 import { asSnapshot, type SnapshotQuote } from "@/lib/snapshot-filter";
@@ -11,7 +12,7 @@ const BROWSERISH = {
   "User-Agent": "Mozilla/5.0",
 };
 
-export type MarketListVia = "eastmoney" | "sina";
+export type MarketListVia = "akshare" | "eastmoney" | "sina";
 
 export type MarketListResult = {
   rows: SnapshotQuote[];
@@ -236,9 +237,59 @@ async function fetchSinaList(signal?: AbortSignal): Promise<MarketListResult | n
 }
 
 export async function fetchAShareSnapshots(signal?: AbortSignal): Promise<MarketListResult | null> {
+  const akshare = await fetchAkshareList();
+  if (akshare && akshare.rows.length >= 80) return akshare;
   const east = await fetchEastMoneyList(signal);
   if (east && east.rows.length >= 80) return east;
   return fetchSinaList(signal);
+}
+
+type AksharePayload = {
+  error?: string;
+  via?: string;
+  total?: number;
+  rows?: Array<{
+    code?: string;
+    name?: string;
+    last?: number;
+    changePct?: number;
+    volumeRatio?: number | null;
+    turnoverRatio?: number | null;
+  }>;
+};
+
+let akshareCache: { at: number; result: MarketListResult } | null = null;
+
+async function fetchAkshareList(): Promise<MarketListResult | null> {
+  const now = Date.now();
+  if (akshareCache && now - akshareCache.at < 180_000) return akshareCache.result;
+  try {
+    const { stdout } = await execFileAsync("python3", [path.join(process.cwd(), "scripts/akshare_spot.py")], {
+      timeout: 45_000,
+      maxBuffer: 12_000_000,
+      env: { ...process.env, TQDM_DISABLE: "1", PYTHONUNBUFFERED: "1" },
+    });
+    const payload = JSON.parse(stdout) as AksharePayload;
+    if (payload.error || !Array.isArray(payload.rows)) return null;
+    const rows: SnapshotQuote[] = [];
+    for (const item of payload.rows) {
+      const parsed = asSnapshot({
+        code: String(item.code ?? ""),
+        name: String(item.name ?? item.code ?? ""),
+        last: Number(item.last),
+        changePct: Number(item.changePct),
+        volumeRatio: item.volumeRatio ?? null,
+        turnoverRatio: item.turnoverRatio ?? null,
+      });
+      if (parsed) rows.push(parsed);
+    }
+    if (rows.length < 80) return null;
+    const result = { rows, total: payload.total || rows.length, via: "akshare" as const, scanned: rows.length };
+    akshareCache = { at: Date.now(), result };
+    return result;
+  } catch {
+    return null;
+  }
 }
 
 const TENCENT_VOLUME_RATIO_INDEX = 49;
