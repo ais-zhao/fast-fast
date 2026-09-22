@@ -31,6 +31,12 @@ export type Candidate = {
   ma10: number;
   consecutiveUpDays: number;
   limitUp: boolean;
+  setupKind: string;
+  setupScore: number;
+  rewardRisk: number;
+  targetPrice: number;
+  suggestedStopPrice: number;
+  extensionPct: number;
   reasons: string[];
   invalidateWhen: string[];
   suggestedStopPct: number;
@@ -38,6 +44,13 @@ export type Candidate = {
   bar: OhlcBar;
   sourceUrl: string;
   upstreamUrl?: string;
+};
+
+export type DeskScanStats = {
+  pool: number;
+  fetched: number;
+  passed: number;
+  skipped: Partial<Record<string, number>>;
 };
 
 export type DeskPayload = {
@@ -50,6 +63,7 @@ export type DeskPayload = {
   notice: string;
   dataSource: DataSource;
   quotes: QuoteBook;
+  scanStats?: DeskScanStats;
 };
 
 export type ExitReason = "stop" | "time" | "manual";

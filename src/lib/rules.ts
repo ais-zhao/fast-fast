@@ -6,6 +6,7 @@ export const LOT_SIZE = 100;
 export const MIN_HOLD_DAYS = 3;
 export const MAX_HOLD_DAYS = 5;
 export const DEFAULT_HOLD_DAYS = 4;
+export const MAX_RISK_PER_TRADE = 2_000;
 
 export type BuyBlockReason =
   | "already-held"
@@ -39,10 +40,15 @@ export function maxLotsForPrice(price: number): number {
   return Math.floor(MAX_PER_STOCK / (price * LOT_SIZE));
 }
 
-export function suggestedLots(price: number, cash: number): number {
+export function suggestedLots(price: number, cash: number, stopPrice?: number): number {
   const byCap = maxLotsForPrice(price);
   const byCash = Math.floor(Math.max(0, cash - MIN_CASH_BUFFER) / (price * LOT_SIZE));
-  return Math.max(0, Math.min(byCap, byCash));
+  let byRisk = byCap;
+  if (stopPrice != null && stopPrice < price) {
+    const riskPerLot = (price - stopPrice) * LOT_SIZE;
+    if (riskPerLot > 0) byRisk = Math.floor(MAX_RISK_PER_TRADE / riskPerLot);
+  }
+  return Math.max(0, Math.min(byCap, byCash, byRisk));
 }
 
 export function canOpenPosition(input: {
@@ -64,11 +70,25 @@ export function canOpenPosition(input: {
   return { ok: true, cost };
 }
 
-export function suggestedStop(last: number, ma10: number, stopPct: number): number {
+export function suggestedStop(
+  last: number,
+  ma10: number,
+  stopPct: number,
+  structuralStop?: number,
+): number {
+  if (structuralStop != null && structuralStop < last) {
+    return round2(Math.min(structuralStop, last - 0.01));
+  }
   const pctStop = last * (1 - stopPct);
   const maStop = ma10 * 0.995;
   const stop = Math.min(pctStop, maStop);
   return round2(Math.min(stop, last - 0.01));
+}
+
+export function rewardRisk(entry: number, stop: number, target: number): number {
+  const risk = entry - stop;
+  if (risk <= 0) return 0;
+  return round2((target - entry) / risk);
 }
 
 export function round2(n: number): number {

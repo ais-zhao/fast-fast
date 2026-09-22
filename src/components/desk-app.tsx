@@ -8,6 +8,7 @@ import {
   CapitalBarSkeleton,
 } from "@/components/candidate-list";
 import { DisclaimerBanner } from "@/components/disclaimer-banner";
+import { HardRulesNote } from "@/components/hard-rules-note";
 import { PositionsPanel } from "@/components/positions-panel";
 import { ReviewPanel } from "@/components/review-panel";
 import { TradePlanCard } from "@/components/trade-plan-card";
@@ -18,6 +19,7 @@ import { usePaperAccount } from "@/hooks/use-paper-account";
 import { getDeskPayload } from "@/lib/mock-data";
 import { formatMonthDay, nextTradingDay } from "@/lib/market";
 import { latestQuoteDate } from "@/lib/quotes";
+import { MAX_CANDIDATES, topSkipLines } from "@/lib/scan-rules";
 import { advanceSession, tryClosePosition, tryOpenPosition } from "@/lib/paper";
 import type { Candidate, DeskPayload, ExitReason, MarketScene, MarkContext, QuoteBook } from "@/lib/types";
 import { CircleAlert, RefreshCw } from "lucide-react";
@@ -134,7 +136,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
             <p className="text-xs tracking-[0.18em] text-muted-foreground">A 股 · 纸上模拟</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">波段作战台</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              T+1 至 3～5 日波段 · 不打板 · 不接券商实盘
+              T+1 至 3～5 日波段 · 硬规则挡差结构 · 不打板 · 不接券商实盘
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -237,16 +239,19 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
             <div>
               <h2 className="text-lg font-medium">今日候选</h2>
               <p className="text-sm text-muted-foreground">
-                最多 8 只，用人话写出入选原因。点进去才生成交易计划卡。
+                最多 {MAX_CANDIDATES} 只，只保留过硬规则的结构。点进去才生成交易计划卡。
               </p>
             </div>
             {loadState !== "error" ? (
-              <p className="text-xs text-muted-foreground">{candidates.length} / 8</p>
+              <p className="text-xs text-muted-foreground">
+                {candidates.length} / {MAX_CANDIDATES}
+              </p>
             ) : null}
           </div>
+          <HardRulesNote />
           {loadState === "loading" && candidates.length === 0 ? <CandidateListSkeleton /> : null}
           {loadState !== "error" && loadState !== "loading" && candidates.length === 0 ? (
-            <EmptyCandidates planFor={payload.planFor} />
+            <EmptyCandidates planFor={payload.planFor} scanStats={payload.scanStats} />
           ) : null}
           {candidates.length > 0 ? (
             <CandidateList
@@ -307,20 +312,33 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
 
       <footer className="mt-auto border-t pt-4 text-xs leading-5 text-muted-foreground">
         演示资金 10 万元，单票上限 2 万元，同时最多 3
-        只。本工具只训练纪律，不提供荐股，也不承诺任何收益。
+        只。硬规则用来少做错结构，不提供荐股，也不承诺任何收益。
       </footer>
     </div>
   );
 }
 
-function EmptyCandidates({ planFor }: { planFor?: string }) {
+function EmptyCandidates({
+  planFor,
+  scanStats,
+}: {
+  planFor?: string;
+  scanStats?: DeskPayload["scanStats"];
+}) {
+  const skipHint = scanStats ? topSkipLines(scanStats) : "";
   return (
     <div className="rounded-xl border border-dashed p-6">
       <h3 className="font-medium">这一批没有可做的票</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         {planFor ? `${formatMonthDay(planFor)} 的` : ""}
-        扫描没有找出符合规则的标的：近几日放量、站上短期均线、而且不是涨停追高。空仓也是一种计划，不必硬找。
+        扫描没有找出同时满足硬规则的标的：回踩或沿均线、温和放量、上方有空间、盈亏比至少 1.3。空仓也是一种计划，不必硬找。
       </p>
+      {scanStats ? (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          观察池 {scanStats.pool} 只 · 拉到日K {scanStats.fetched} 只 · 通过 {scanStats.passed} 只
+          {skipHint ? `。主要挡掉：${skipHint}` : ""}。
+        </p>
+      ) : null}
     </div>
   );
 }

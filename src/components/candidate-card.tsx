@@ -43,8 +43,7 @@ export function CandidateCard({
               </span>
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              {candidate.board} · 量比 {candidate.volumeRatio.toFixed(2)} · 连涨{" "}
-              {candidate.consecutiveUpDays} 天
+              {candidate.board} · {candidate.setupKind} · 量比 {candidate.volumeRatio.toFixed(2)}
             </p>
           </div>
           <div className="text-right">
@@ -81,8 +80,9 @@ export function CandidateCard({
         )}
         <p className="text-sm leading-6 text-foreground/90">{candidate.reasons[0]}</p>
         <div className="flex flex-wrap gap-1.5">
+          <Badge variant="outline">盈亏比 {candidate.rewardRisk.toFixed(2)}</Badge>
+          <Badge variant="outline">离均线 {candidate.extensionPct.toFixed(1)}%</Badge>
           <Badge variant="outline">未涨停</Badge>
-          <Badge variant="outline">站上均线</Badge>
           {alreadyHeld ? <Badge>已持有</Badge> : null}
         </div>
       </CardContent>

@@ -18,6 +18,7 @@ import {
   DEFAULT_HOLD_DAYS,
   MAX_HOLD_DAYS,
   MAX_PER_STOCK,
+  MAX_RISK_PER_TRADE,
   MIN_HOLD_DAYS,
   TOTAL_CAPITAL,
   buyBlockCopy,
@@ -25,15 +26,22 @@ import {
   clampHoldDays,
   maxLotsForPrice,
   positionCost,
+  rewardRisk,
   suggestedLots,
   suggestedStop,
 } from "@/lib/rules";
 import type { Candidate, OhlcBar, PaperState } from "@/lib/types";
 
 function initialLots(candidate: Candidate, cash: number) {
+  const stop = suggestedStop(
+    candidate.last,
+    candidate.ma10,
+    candidate.suggestedStopPct,
+    candidate.suggestedStopPrice,
+  );
   const nextLots = Math.max(
     1,
-    suggestedLots(candidate.last, cash) || maxLotsForPrice(candidate.last),
+    suggestedLots(candidate.last, cash, stop) || maxLotsForPrice(candidate.last),
   );
   return Math.max(1, Math.min(nextLots, maxLotsForPrice(candidate.last) || 1));
 }
@@ -59,8 +67,7 @@ export function TradePlanCard({
           </CardDescription>
         </CardHeader>
         <CardContent className="text-sm leading-6 text-muted-foreground">
-          默认单票不超过总资金 20%（2 万元），同时最多 3 只，并留下现金缓冲。风格是 T+1
-          到 3～5 日波段，不打板，也不能当天买卖同一只股票。
+          默认单票不超过总资金 20%（2 万元），同时最多 3 只，并留下现金缓冲。硬规则先挡住追高、爆量和没有空间的票，再谈仓位。风格是 T+1 到 3～5 日波段，不打板，也不能当天买卖同一只股票。
         </CardContent>
       </Card>
     );
@@ -82,7 +89,12 @@ function FilledPlan({
 }) {
   const [lots, setLots] = useState(() => initialLots(candidate, paper.cash));
   const [stopPrice, setStopPrice] = useState(() =>
-    suggestedStop(candidate.last, candidate.ma10, candidate.suggestedStopPct).toFixed(2),
+    suggestedStop(
+      candidate.last,
+      candidate.ma10,
+      candidate.suggestedStopPct,
+      candidate.suggestedStopPrice,
+    ).toFixed(2),
   );
   const [holdDays, setHoldDays] = useState(() =>
     clampHoldDays(candidate.suggestedHoldDays || DEFAULT_HOLD_DAYS),
@@ -93,6 +105,7 @@ function FilledPlan({
     const cost = positionCost(lots, candidate.last);
     const stop = Number(stopPrice);
     const risk = Number.isFinite(stop) ? (candidate.last - stop) * lots * 100 : 0;
+    const rr = Number.isFinite(stop) ? rewardRisk(candidate.last, stop, candidate.targetPrice) : 0;
     const check = canOpenPosition({
       code: candidate.code,
       lots,
@@ -100,7 +113,7 @@ function FilledPlan({
       cash: paper.cash,
       openCodes: paper.positions.map((item) => item.code),
     });
-    return { cost, stop, risk, check };
+    return { cost, stop, risk, rr, check };
   }, [candidate, lots, paper.cash, paper.positions, stopPrice]);
 
   const maxLots = Math.max(1, maxLotsForPrice(candidate.last));
@@ -117,7 +130,8 @@ function FilledPlan({
           </span>
         </CardTitle>
         <CardDescription>
-          这根日K收盘 {candidate.last.toFixed(2)} 元 · 5 日均线 {candidate.ma5.toFixed(2)} · 10 日均线{" "}
+          {candidate.setupKind} · 这根日K收盘 {candidate.last.toFixed(2)} 元 · 目标{" "}
+          {candidate.targetPrice.toFixed(2)} · 5 日均线 {candidate.ma5.toFixed(2)} · 10 日均线{" "}
           {candidate.ma10.toFixed(2)}。按这根收盘价纸上成交，不是实时委托。
         </CardDescription>
       </CardHeader>
@@ -188,6 +202,9 @@ function FilledPlan({
             <p className="text-xs text-muted-foreground">
               相对收盘约 {(((candidate.last - plan.stop) / candidate.last) * 100).toFixed(1)}%
               ，这笔最多大约亏 {formatYuanPlain(Math.max(0, plan.risk))}
+              {plan.risk > MAX_RISK_PER_TRADE
+                ? `，已超过单笔风险 ${formatYuanPlain(MAX_RISK_PER_TRADE)} 的建议上限`
+                : ""}
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -212,7 +229,9 @@ function FilledPlan({
           </div>
         </div>
         <p className="text-xs leading-5 text-muted-foreground">
-          单票上限 {formatYuanPlain(MAX_PER_STOCK)}。买入后现金约{" "}
+          目标价 {candidate.targetPrice.toFixed(2)}，当前盈亏比 {plan.rr.toFixed(2)}
+          {plan.rr < 1.3 ? "（把止损放宽后空间不够，这张卡不再是硬规则里的结构）" : "（至少 1.3 才算过硬规则）"}
+          。单票上限 {formatYuanPlain(MAX_PER_STOCK)}。买入后现金约{" "}
           {formatYuanPlain(paper.cash - plan.cost)}。
         </p>
         {blockText ? <p className="text-sm text-destructive">{blockText}</p> : null}
