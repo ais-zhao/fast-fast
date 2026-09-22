@@ -1,4 +1,4 @@
-export type Board = "主板" | "创业板";
+export type Board = "主板" | "创业板" | "科创板";
 
 export type MarketScene = "ok" | "empty" | "error";
 
@@ -50,6 +50,8 @@ export type DeskScanStats = {
   pool: number;
   fetched: number;
   passed: number;
+  shortlisted?: number;
+  listVia?: string;
   skipped: Partial<Record<string, number>>;
   samples?: { code: string; name: string; reason: string }[];
 };

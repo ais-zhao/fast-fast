@@ -1,9 +1,14 @@
 import { tencentKlineUrl, type DailyBar, type StockKline } from "@/lib/public-kline";
 import { toOhlcBar } from "@/lib/quotes";
 import { MAX_PER_STOCK, round2 } from "@/lib/rules";
-import type { ScanSkipReason } from "@/lib/scan-constants";
+import {
+  MAX_DAY_GAIN,
+  MAX_VOLUME_RATIO,
+  MIN_VOLUME_RATIO,
+  type ScanSkipReason,
+} from "@/lib/scan-constants";
 import type { Board, Candidate } from "@/lib/types";
-import { limitUpThreshold } from "@/lib/universe";
+import { isGrowthBoard, limitUpThreshold } from "@/lib/universe";
 
 export {
   HARD_RULE_LINES,
@@ -18,9 +23,6 @@ export {
 
 export const LOT_SIZE = 100;
 export const MIN_BARS = 20;
-export const MIN_VOLUME_RATIO = 1.2;
-export const MAX_VOLUME_RATIO = 2.8;
-export const MAX_DAY_GAIN = 5;
 export const MAX_CONSECUTIVE_UP = 2;
 export const MIN_CLOSE_LOCATION = 0.5;
 export const MAX_UPPER_SHADOW_RATIO = 0.5;
@@ -89,7 +91,7 @@ export function evaluateSetup(kline: StockKline, board: Board): SetupEval {
   if (upDays > MAX_CONSECUTIVE_UP) return { ok: false, reason: "up-days" };
   if (changePct >= MAX_DAY_GAIN) return { ok: false, reason: "day-gain" };
 
-  const maxExtension = board === "创业板" ? 0.08 : 0.06;
+  const maxExtension = isGrowthBoard(board) ? 0.08 : 0.06;
   const extension = ma10 > 0 ? (last - ma10) / ma10 : 0;
   if (extension > maxExtension) return { ok: false, reason: "extended" };
 
@@ -139,7 +141,7 @@ export function evaluateSetup(kline: StockKline, board: Board): SetupEval {
         ? "沿均线温和上移"
         : "整理后收强";
 
-  const holdDays = board === "创业板" ? 3 : extension <= 0.025 ? 4 : 5;
+  const holdDays = isGrowthBoard(board) ? 3 : extension <= 0.025 ? 4 : 5;
   const setupScore = Math.round(
     20 * Math.min(rewardRisk / 2, 1) +
       20 * (1 - extension / maxExtension) +

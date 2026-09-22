@@ -136,7 +136,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
             <p className="text-xs tracking-[0.18em] text-muted-foreground">A 股 · 纸上模拟</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">波段作战台</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              T+1 至 3～5 日波段 · 硬规则挡差结构 · 不打板 · 不接券商实盘
+              T+1 至 3～5 日波段 · 沪深A股快筛 · 硬规则挡差结构 · 不打板
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -185,13 +185,13 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
           </Alert>
         ) : (
           <p className="text-sm text-muted-foreground">
-            {payload.sessionLabel}。数据源：本机服务端代拉腾讯财经日K。Chrome 直连 ifzq.gtimg.cn 会被网关 501，请在 Network 看 /api/desk。
+            {payload.sessionLabel}。数据源：本机先扫沪深A股公开快照，再对进入复核的票拉日K。Chrome 直连 ifzq.gtimg.cn 会被网关 501，请在 Network 看 /api/desk。
             {payload.notice}
           </p>
         )}
         {loadState === "loading" ? (
           <p className="text-xs text-muted-foreground" role="status">
-            正在由本机服务端向腾讯拉取日K。Chrome 里请看 /api/desk，不要等 gtimg 的 501。
+            正在扫沪深A股公开快照并复核日K。Chrome 里请看 /api/desk。
           </p>
         ) : null}
         {flash ? (
@@ -239,7 +239,7 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
             <div>
               <h2 className="text-lg font-medium">今日候选</h2>
               <p className="text-sm text-muted-foreground">
-                最多 {MAX_CANDIDATES} 只，只保留过硬规则的结构。点进去才生成交易计划卡。
+                最多 {MAX_CANDIDATES} 只。沪深A股先快筛，再对进入日K复核的票过硬规则。
               </p>
             </div>
             {loadState !== "error" ? (
@@ -331,11 +331,12 @@ function EmptyCandidates({
       <h3 className="font-medium">这一批没有可做的票</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         {planFor ? `${formatMonthDay(planFor)} 的` : ""}
-        扫描没有找出同时满足硬规则的标的：回踩或沿均线、温和放量、上方有空间、盈亏比至少 1.3。空仓也是一种计划，不必硬找。
+        全市场快筛之后，日K硬规则没有放出可做的结构。空仓也是一种计划，不必硬找。
       </p>
       {scanStats ? (
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          观察池 {scanStats.pool} 只 · 拉到日K {scanStats.fetched} 只 · 通过 {scanStats.passed} 只
+          沪深A股约 {scanStats.pool} 只 · 快筛留下 {scanStats.shortlisted ?? "—"} 只 · 日K复核{" "}
+          {scanStats.fetched} 只 · 通过 {scanStats.passed} 只
           {skipHint ? `。主要挡掉：${skipHint}` : ""}。
         </p>
       ) : null}

@@ -189,8 +189,8 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
     scanStats:
       scene === "empty"
         ? {
-            pool: 40,
-            fetched: 40,
+            pool: 5200,
+            fetched: 80,
             passed: 0,
             skipped: { extended: 12, rr: 9, "volume-climax": 6 },
             samples: [
@@ -198,8 +198,18 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
               { code: "300059", name: "东方财富", reason: "rr" },
               { code: "601138", name: "工业富联", reason: "volume-climax" },
             ],
+            shortlisted: 80,
+            listVia: "eastmoney",
           }
-        : { pool: 40, fetched: 40, passed: candidates.length, skipped: { extended: 8, rr: 7 }, samples: [] },
+        : {
+            pool: 40,
+            fetched: 40,
+            passed: candidates.length,
+            skipped: { extended: 8, rr: 7 },
+            samples: [],
+            shortlisted: 5,
+            listVia: "fallback-40",
+          },
   };
 }
 
@@ -215,6 +225,6 @@ export function loadingDeskPayload(): DeskPayload {
     quotes: {},
     dataSource: "delayed-public",
     notice:
-      "正在由本机服务端向腾讯财经拉取前复权日K。Chrome 直连 gtimg 会 501，请看 /api/desk。首屏不再塞模拟名单。",
+      "正在扫沪深A股公开快照，再对进入复核的票拉日K。Chrome 直连 gtimg 会 501，请看 /api/desk。",
   };
 }

@@ -1,4 +1,8 @@
 export const MAX_CANDIDATES = 5;
+export const MAX_KLINE_POOL = 80;
+export const MIN_VOLUME_RATIO = 1.2;
+export const MAX_VOLUME_RATIO = 2.8;
+export const MAX_DAY_GAIN = 5;
 
 export type ScanSkipReason =
   | "bars"
@@ -20,7 +24,9 @@ export type ScanSkipReason =
   | "no-room"
   | "stop-wide"
   | "rr"
-  | "fetch-fail";
+  | "fetch-fail"
+  | "not-ashare"
+  | "kline-cap";
 
 export const SKIP_COPY: Record<ScanSkipReason, string> = {
   bars: "日K不足 20 根",
@@ -43,13 +49,16 @@ export const SKIP_COPY: Record<ScanSkipReason, string> = {
   "stop-wide": "止损过宽",
   rr: "盈亏比不够",
   "fetch-fail": "日K没拉到",
+  "not-ashare": "不是沪深A股",
+  "kline-cap": "快筛过关但未进入日K复核",
 };
 
 export const HARD_RULE_LINES = [
+  "先扫沪深A股全市场快照，北交所和 B 股不要；再对进入日K复核的票过硬规则",
   "一手不超过 2 万；ST、涨停、一字板不要",
   "量比 1.2～2.8，爆量高潮不要",
   "收盘站上 5 日和 10 日线，且 5 日线不低于 10 日线",
-  "离开 10 日线：主板不超过 6%，创业板不超过 8%",
+  "离开 10 日线：主板不超过 6%，创业板/科创板不超过 8%",
   "当日涨幅小于 5%，连涨不超过 2 天；高开超过 4% 当追空处理",
   "收盘要落在当日区间上半，长上影、振幅过大不要",
   "近 10 日高点要有空间；止损不超过 6%，盈亏比至少 1.3",
@@ -60,12 +69,22 @@ export type ScanStats = {
   pool: number;
   fetched: number;
   passed: number;
+  shortlisted: number;
+  listVia: "eastmoney" | "sina" | "fallback-40";
   skipped: Partial<Record<ScanSkipReason, number>>;
   samples: { code: string; name: string; reason: ScanSkipReason }[];
 };
 
 export function emptyScanStats(pool: number): ScanStats {
-  return { pool, fetched: 0, passed: 0, skipped: {}, samples: [] };
+  return {
+    pool,
+    fetched: 0,
+    passed: 0,
+    shortlisted: 0,
+    listVia: "eastmoney",
+    skipped: {},
+    samples: [],
+  };
 }
 
 export function bumpSkip(
@@ -77,6 +96,11 @@ export function bumpSkip(
   if (sample && stats.samples.length < 8) {
     stats.samples.push({ ...sample, reason });
   }
+}
+
+export function bumpSkipCount(stats: ScanStats, reason: ScanSkipReason, count: number) {
+  if (count <= 0) return;
+  stats.skipped[reason] = (stats.skipped[reason] ?? 0) + count;
 }
 
 export function topSkipLines(
