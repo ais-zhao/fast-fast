@@ -130,7 +130,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
     const notice =
       candidates.length === 0
         ? "公开延迟行情已取到，但这一批观察池里没有同时满足：放量、站上均线、且不是涨停追高。空仓也是一种计划。"
-        : `候选来自本机服务端代拉的腾讯财经前复权日K。Chrome 直连 web.ifzq.gtimg.cn 常会 501，所以 Network 请看 /api/desk 和「同源日K JSON」。不是实时成交价，更不是投资建议。`;
+        : `候选来自本机服务端代拉的公开延迟日K（腾讯优先，不通则新浪）。Chrome 直连 ifzq.gtimg.cn 常会 501，请看 /api/desk。不是实时成交价，更不是投资建议。`;
 
     const quotes: QuoteBook = {};
     const keep = new Set([...candidates.map((item) => item.code), ...heldCodes]);

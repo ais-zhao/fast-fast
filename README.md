@@ -12,7 +12,7 @@
 
 演示资金 **10 万元**。同时持有不超过 3 只，股票占用最多约 6 万，至少留 4 万现金。
 
-行情默认由**本机 Next 服务端代拉腾讯财经日K**（`web.ifzq.gtimg.cn`，前复权）。Chrome 直连该域名常返回 **501 Not Implemented**，所以开发者工具请看 `/api/desk` 和 `/api/kline?code=xxxxxx`。拉不到时自动改用离线演示，右上角也可强制「离线演示」。离线演示里，「下一交易日」仍用固定模拟路径方便练习纪律。不是投资建议，也没有必胜或保证收益。
+行情默认由**本机 Next 服务端代拉公开延迟日K**（腾讯 `web.ifzq.gtimg.cn` 优先；该域名对 Chrome/部分 Node 常返回 **501**，则改拉新浪日K）。开发者工具请看 `/api/desk` 和 `/api/kline?code=xxxxxx`。拉不到时自动改用离线演示。
 
 ## 本地运行
 
@@ -35,7 +35,7 @@ npm start
 ## 本机仍显示离线演示时
 
 1. `git pull origin main` 后 **停掉再开** `npm run dev`（旧进程不会带上代拉）。
-2. 浏览器打开 [http://127.0.0.1:43127/api/kline?code=000001](http://127.0.0.1:43127/api/kline?code=000001)：应是 JSON 且 `code: 0`。若是 502，看返回里的 `status`（Chrome 直连腾讯 501 是正常的，这个地址不该 501）。
+2. 浏览器打开 [http://127.0.0.1:43127/api/kline?code=000001](http://127.0.0.1:43127/api/kline?code=000001)：应是 JSON 且带 `data`。响应头 `x-kline-via` 为 `fetch`/`curl`/`sina`。若仍是 `"腾讯返回 HTTP 501"`，说明还在跑旧进程。
 3. 页面右上角不要停在「离线演示」。
 4. 红色提示里会写扫描失败原因。
 

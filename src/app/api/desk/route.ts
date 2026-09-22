@@ -38,7 +38,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : "扫描失败";
     const fallback = getDeskPayload("ok");
-    fallback.notice = `腾讯日K没拉到（${reason}），已改用离线演示。请 git pull 后重启 npm run dev，浏览器打开 /api/kline?code=000001：200 才是代拉成功。curl 能通、页面仍离线，通常是 Node 被网关 501，新版本会再试 curl。`;
+    fallback.notice = `公开日K没拉到（${reason}），已改用离线演示。请重启 npm run dev 后打开 /api/kline?code=000001。腾讯 501 时服务端会改拉新浪日K。`;
     return NextResponse.json(fallback);
   }
 }
