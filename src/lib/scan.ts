@@ -1,4 +1,4 @@
-import { fetchAShareSnapshots } from "@/lib/market-list";
+import { attachTencentVolumeRatio, fetchAShareSnapshots } from "@/lib/market-list";
 import { fetchDailyKline, mapPool } from "@/lib/public-kline";
 import { sessionMeta } from "@/lib/market";
 import { toOhlcBar } from "@/lib/quotes";
@@ -22,13 +22,14 @@ function fallbackPool(): SnapshotQuote[] {
     last: 1,
     changePct: 0,
     volumeRatio: null,
+    turnoverRatio: null,
   }));
 }
 
 export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPayload> {
   const meta = sessionMeta();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 50_000);
+  const timer = setTimeout(() => controller.abort(), 70_000);
 
   try {
     const listed = await fetchAShareSnapshots(controller.signal);
@@ -46,13 +47,30 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       shortlist.push(row);
     }
 
-    if (listed && listed.total > listed.scanned) {
+    if (listed?.via === "eastmoney" && listed.total > listed.scanned) {
       bumpSkipCount(stats, "volume-low", listed.total - listed.scanned);
     }
 
     stats.shortlisted = shortlist.length;
     shortlist.sort((a, b) => snapshotScore(b) - snapshotScore(a));
-    bumpSkipCount(stats, "kline-cap", Math.max(0, shortlist.length - MAX_KLINE_POOL));
+
+    const missingVolume = shortlist.filter((row) => row.volumeRatio == null).slice(0, 480);
+    if (missingVolume.length > 0) {
+      await attachTencentVolumeRatio(missingVolume, controller.signal);
+      const kept: SnapshotQuote[] = [];
+      for (const row of shortlist) {
+        const reason = cheapSkip(row);
+        if (reason) {
+          bumpSkip(stats, reason, { code: row.code, name: row.name });
+          continue;
+        }
+        kept.push(row);
+      }
+      shortlist.length = 0;
+      shortlist.push(...kept);
+      stats.shortlisted = shortlist.length;
+      shortlist.sort((a, b) => snapshotScore(b) - snapshotScore(a));
+    }
 
     const extraHeld = heldCodes
       .filter((code) => /^\d{6}$/.test(code))
@@ -68,38 +86,61 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
           last: 1,
           changePct: 0,
           volumeRatio: null,
+          turnoverRatio: null,
         } satisfies SnapshotQuote;
       })
       .filter((row): row is SnapshotQuote => row !== null);
 
-    const klineTargets: SnapshotQuote[] = [];
     const seen = new Set<string>();
-    for (const row of [...extraHeld, ...shortlist.slice(0, MAX_KLINE_POOL)]) {
+    const klineTargets: SnapshotQuote[] = [];
+    for (const row of extraHeld) {
       if (seen.has(row.code)) continue;
       seen.add(row.code);
       klineTargets.push(row);
     }
 
-    const fetched = await mapPool(klineTargets, 8, async (item) => {
-      try {
-        const kline = await fetchDailyKline(item.code, controller.signal);
-        if (!kline) {
+    const takeKlineSlice = (offset: number) => {
+      const slice = shortlist.slice(offset, offset + MAX_KLINE_POOL);
+      for (const row of slice) {
+        if (seen.has(row.code)) continue;
+        seen.add(row.code);
+        klineTargets.push(row);
+      }
+      return slice.length;
+    };
+
+    let klineReviewed = takeKlineSlice(0);
+
+    const reviewTargets = async (items: SnapshotQuote[]) =>
+      mapPool(items, 8, async (item) => {
+        try {
+          const kline = await fetchDailyKline(item.code, controller.signal);
+          if (!kline) {
+            bumpSkip(stats, "fetch-fail", { code: item.code, name: item.name });
+            return { kline: null, candidate: null };
+          }
+          stats.fetched += 1;
+          const evaluated = evaluateSetup(kline, item.board);
+          if (!evaluated.ok) {
+            bumpSkip(stats, evaluated.reason, { code: kline.code, name: kline.name });
+            return { kline, candidate: null };
+          }
+          stats.passed += 1;
+          return { kline, candidate: evaluated.candidate };
+        } catch {
           bumpSkip(stats, "fetch-fail", { code: item.code, name: item.name });
           return { kline: null, candidate: null };
         }
-        stats.fetched += 1;
-        const evaluated = evaluateSetup(kline, item.board);
-        if (!evaluated.ok) {
-          bumpSkip(stats, evaluated.reason, { code: kline.code, name: kline.name });
-          return { kline, candidate: null };
-        }
-        stats.passed += 1;
-        return { kline, candidate: evaluated.candidate };
-      } catch {
-        bumpSkip(stats, "fetch-fail", { code: item.code, name: item.name });
-        return { kline: null, candidate: null };
-      }
-    });
+      });
+
+    const firstBatch = klineTargets.slice();
+    const fetched = await reviewTargets(firstBatch);
+    if (stats.passed === 0 && shortlist.length > MAX_KLINE_POOL) {
+      const start = klineTargets.length;
+      klineReviewed += takeKlineSlice(MAX_KLINE_POOL);
+      fetched.push(...(await reviewTargets(klineTargets.slice(start))));
+    }
+    bumpSkipCount(stats, "kline-cap", Math.max(0, shortlist.length - klineReviewed));
 
     const gotBars = fetched.filter((row) => row.kline).length;
     if (gotBars < 5 && stats.listVia === "fallback-40") {

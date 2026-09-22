@@ -1,7 +1,7 @@
 import "server-only";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mapPool } from "@/lib/public-kline";
+import { mapPool, tencentSymbol } from "@/lib/public-kline";
 import { asSnapshot, type SnapshotQuote } from "@/lib/snapshot-filter";
 
 const execFileAsync = promisify(execFile);
@@ -84,7 +84,7 @@ function emUrl(host: string, page: number): string {
   return (
     `${host}/api/qt/clist/get?pn=${page}&pz=${EM_PAGE_SIZE}&po=1&np=1&fltt=2&invt=2&fid=f10` +
     `&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23` +
-    `&fields=f2,f3,f10,f12,f14`
+    `&fields=f2,f3,f8,f10,f12,f14`
   );
 }
 
@@ -102,6 +102,7 @@ function parseEmPage(json: unknown): EmPage | null {
     const last = toNumber(row.f2);
     const changePct = toNumber(row.f3);
     const volumeRatio = toNumber(row.f10);
+    const turnoverRatio = toNumber(row.f8);
     const code = String(row.f12 ?? "");
     const name = String(row.f14 ?? code);
     if (last == null || changePct == null) continue;
@@ -111,6 +112,7 @@ function parseEmPage(json: unknown): EmPage | null {
       last,
       changePct,
       volumeRatio,
+      turnoverRatio,
     });
     if (parsed) rows.push(parsed);
   }
@@ -175,6 +177,7 @@ function parseSinaRows(json: unknown): SnapshotQuote[] {
       last,
       changePct,
       volumeRatio: null,
+      turnoverRatio: toNumber(item.turnoverratio),
     });
     if (parsed) rows.push(parsed);
   }
@@ -196,7 +199,7 @@ async function fetchSinaCount(signal?: AbortSignal): Promise<number> {
 function sinaPageUrl(page: number): string {
   return (
     "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData" +
-    `?page=${page}&num=${SINA_PAGE_SIZE}&sort=symbol&asc=1&node=hs_a`
+    `?page=${page}&num=${SINA_PAGE_SIZE}&sort=turnoverratio&asc=0&node=hs_a`
   );
 }
 
@@ -237,3 +240,65 @@ export async function fetchAShareSnapshots(signal?: AbortSignal): Promise<Market
   if (east && east.rows.length >= 80) return east;
   return fetchSinaList(signal);
 }
+
+const TENCENT_VOLUME_RATIO_INDEX = 49;
+const QUOTE_BATCH = 60;
+
+async function loadQuoteText(url: string, signal?: AbortSignal): Promise<string | null> {
+  try {
+    const response = await fetch(url, { signal, cache: "no-store", headers: BROWSERISH });
+    if (response.ok) {
+      return new TextDecoder("gbk").decode(await response.arrayBuffer());
+    }
+  } catch {
+    // fall through to curl
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      "curl",
+      ["-sS", "-m", "10", "--http1.1", "-H", "User-Agent: Mozilla/5.0", url],
+      { encoding: "buffer", maxBuffer: 2_000_000 },
+    );
+    return new TextDecoder("gbk").decode(stdout);
+  } catch {
+    return null;
+  }
+}
+
+function parseTencentVolumeRatios(text: string): Map<string, number> {
+  const found = new Map<string, number>();
+  for (const chunk of text.split(";")) {
+    const start = chunk.indexOf('="');
+    if (start < 0) continue;
+    const inner = chunk.slice(start + 2).replace(/"\s*$/, "");
+    const parts = inner.split("~");
+    const code = (parts[2] ?? "").trim();
+    const ratio = Number(parts[TENCENT_VOLUME_RATIO_INDEX]);
+    if (/^\d{6}$/.test(code) && Number.isFinite(ratio) && ratio > 0) {
+      found.set(code, Math.round(ratio * 100) / 100);
+    }
+  }
+  return found;
+}
+
+export async function attachTencentVolumeRatio(
+  rows: SnapshotQuote[],
+  signal?: AbortSignal,
+): Promise<number> {
+  let attached = 0;
+  for (let index = 0; index < rows.length; index += QUOTE_BATCH) {
+    const batch = rows.slice(index, index + QUOTE_BATCH);
+    const url = `https://qt.gtimg.cn/q=${batch.map((row) => tencentSymbol(row.code)).join(",")}`;
+    const text = await loadQuoteText(url, signal);
+    if (!text) continue;
+    const ratios = parseTencentVolumeRatios(text);
+    for (const row of batch) {
+      const ratio = ratios.get(row.code);
+      if (ratio == null) continue;
+      row.volumeRatio = ratio;
+      attached += 1;
+    }
+  }
+  return attached;
+}
+

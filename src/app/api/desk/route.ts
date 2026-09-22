@@ -4,7 +4,7 @@ import { scanDelayedDesk } from "@/lib/scan";
 import type { MarketScene } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 function heldCodesFrom(request: Request): string[] {
   const url = new URL(request.url);

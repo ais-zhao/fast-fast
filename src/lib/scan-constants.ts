@@ -1,5 +1,5 @@
 export const MAX_CANDIDATES = 5;
-export const MAX_KLINE_POOL = 80;
+export const MAX_KLINE_POOL = 150;
 export const MIN_VOLUME_RATIO = 1.2;
 export const MAX_VOLUME_RATIO = 2.8;
 export const MAX_DAY_GAIN = 5;
