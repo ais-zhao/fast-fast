@@ -1,6 +1,6 @@
 import type { Board } from "@/lib/types";
 
-/** Fallback pool if the full-market snapshot list is down. */
+/** Kept only for explicit offline-demo fixtures. Live scan/warm never use this pool. */
 export const SCAN_UNIVERSE: { code: string; board: Board }[] = [
   { code: "000001", board: "主板" },
   { code: "000002", board: "主板" },

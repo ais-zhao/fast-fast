@@ -12,7 +12,6 @@ import {
 } from "@/lib/kline-store";
 import { configurePoliteSource, politeSourceStatus } from "@/lib/polite-fetch";
 import { cheapSkip } from "@/lib/snapshot-filter";
-import { SCAN_UNIVERSE } from "@/lib/universe";
 
 disableProcessProxy();
 
@@ -38,26 +37,20 @@ export type WarmResult = {
   coverage: ReturnType<typeof klineCoverage>;
   sources: ReturnType<typeof politeSourceStatus>;
   failSamples: { code: string; name: string }[];
+  listVia: string;
 };
-
-function fallbackUniverse() {
-  return SCAN_UNIVERSE.map((item) => ({
-    code: item.code,
-    name: item.code,
-    board: item.board,
-    last: 1,
-    changePct: 0,
-    volumeRatio: null as number | null,
-    turnoverRatio: null as number | null,
-  }));
-}
 
 export async function warmKlineLibrary(options: WarmOptions = {}): Promise<WarmResult> {
   configurePoliteSource("tencent", { concurrency: 2, minIntervalMs: 550, batchSize: 50 });
   configurePoliteSource("sina", { concurrency: 2, minIntervalMs: 550, batchSize: 50 });
 
   const listed = await fetchAShareSnapshots(options.signal);
-  const rows = listed?.rows ?? fallbackUniverse();
+  if (!listed || listed.rows.length < 80) {
+    throw new Error(
+      "沪深A股全市场快照没拉到（AKShare/东财/新浪都失败）。填库不会改用 40 只备用池。请检查代理（常见 127.0.0.1:7890）、pip install -r requirements.txt，再跑 python3 scripts/akshare_spot.py。",
+    );
+  }
+  const rows = listed.rows;
   const universe = rows.map((row) => ({
     code: row.code,
     name: row.name,
@@ -120,6 +113,7 @@ export async function warmKlineLibrary(options: WarmOptions = {}): Promise<WarmR
     coverage: klineCoverage(),
     sources: politeSourceStatus(),
     failSamples: listFailSamples(8),
+    listVia: listed.via,
   };
 }
 
@@ -130,7 +124,7 @@ export function warmStatusPayload() {
     coverage: klineCoverage(),
     sources: politeSourceStatus(),
     failSamples: listFailSamples(8),
-    note: "填库请跑 npm run kline:warm。盘中 /api/desk 只读本地库，不会批量打公开源。优先铺快筛可能过关的票。",
+    note: "填库请跑 npm run kline:warm。盘中 /api/desk 只读本地库，不会批量打公开源。优先铺快筛可能过关的票。快照失败时不会静默改用 40 只备用池。",
   };
 }
 

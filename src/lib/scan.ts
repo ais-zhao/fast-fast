@@ -13,19 +13,7 @@ import { evaluateSetup, topSkipLines } from "@/lib/scan-rules";
 import { cheapSkip, type SnapshotQuote } from "@/lib/snapshot-filter";
 import type { Candidate, DeskPayload, QuoteBook } from "@/lib/types";
 import type { StockKline } from "@/lib/public-kline";
-import { SCAN_UNIVERSE, boardFromCode } from "@/lib/universe";
-
-function fallbackPool(): SnapshotQuote[] {
-  return SCAN_UNIVERSE.map((item) => ({
-    code: item.code,
-    name: item.code,
-    board: item.board,
-    last: 1,
-    changePct: 0,
-    volumeRatio: null,
-    turnoverRatio: null,
-  }));
-}
+import { boardFromCode } from "@/lib/universe";
 
 export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPayload> {
   const meta = sessionMeta();
@@ -34,9 +22,14 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
 
   try {
     const listed = await fetchAShareSnapshots(controller.signal);
-    const snapshots = listed?.rows ?? fallbackPool();
-    const stats = emptyScanStats(listed?.total ?? snapshots.length);
-    stats.listVia = listed?.via ?? "fallback-40";
+    if (!listed || listed.rows.length < 80) {
+      throw new Error(
+        "沪深A股全市场快照没拉到（AKShare/东财/新浪都失败）。未切离线演示时不会改用 40 只备用池。请检查代理（常见 127.0.0.1:7890）、pip install -r requirements.txt，并打开 /api/kline-cache。",
+      );
+    }
+    const snapshots = listed.rows;
+    const stats = emptyScanStats(listed.total);
+    stats.listVia = listed.via;
 
     const coverage = klineCoverage();
     stats.cacheOk = coverage.ok;
@@ -99,12 +92,10 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
     for (const row of extraHeld) reviewSet.set(row.code, row);
 
     const fetched: { kline: StockKline | null; candidate: Candidate | null }[] = [];
-    let missingLibrary = 0;
 
     for (const item of reviewSet.values()) {
       const cached = loadKlineFromStore(item.code);
       if (!cached) {
-        missingLibrary += 1;
         bumpSkip(stats, "kline-cap", { code: item.code, name: item.name });
         fetched.push({ kline: null, candidate: null });
         continue;
@@ -122,9 +113,9 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
       fetched.push({ kline: cached, candidate: evaluated.candidate });
     }
 
-    if (stats.shortlisted > 0 && stats.fetched === 0 && stats.listVia === "fallback-40") {
+    if (stats.shortlisted > 0 && stats.fetched === 0) {
       throw new Error(
-        `本地日K库还没有可用数据（未收录 ${missingLibrary} 只）。请先跑 npm run kline:warm，再刷新。`,
+        `本地日K库对快筛过关的 ${stats.shortlisted} 只尚未收录（未复核）。请先跑 npm run kline:warm，再刷新。未切离线演示时不会改用假数据。`,
       );
     }
 
@@ -155,9 +146,7 @@ export async function scanDelayedDesk(heldCodes: string[] = []): Promise<DeskPay
         ? "AKShare 快照"
         : stats.listVia === "eastmoney"
           ? "东方财富快照"
-          : stats.listVia === "sina"
-            ? "新浪行情列表"
-            : "40 只备用池";
+          : "新浪行情列表";
     const notice =
       candidates.length === 0
         ? `沪深A股约 ${stats.pool} 只（${listLabel}），快筛留下 ${stats.shortlisted} 只，本地日K复核 ${stats.fetched} 只，硬规则一只都没放过。${coverageHint}${ruleHint}${quotaNote}空仓也是一种计划，全市场扫描不是保证赚钱。`

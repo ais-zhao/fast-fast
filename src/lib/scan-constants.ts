@@ -73,7 +73,7 @@ export type ScanStats = {
   fetched: number;
   passed: number;
   shortlisted: number;
-  listVia: "akshare" | "eastmoney" | "sina" | "fallback-40";
+  listVia: "akshare" | "eastmoney" | "sina";
   fromCache?: number;
   cacheOk?: number;
   cacheTotal?: number;

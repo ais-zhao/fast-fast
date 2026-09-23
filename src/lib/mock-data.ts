@@ -208,7 +208,7 @@ export function getDeskPayload(scene: "ok" | "empty" = "ok"): DeskPayload {
             skipped: { extended: 8, rr: 7 },
             samples: [],
             shortlisted: 5,
-            listVia: "fallback-40",
+            listVia: "sina",
           },
   };
 }

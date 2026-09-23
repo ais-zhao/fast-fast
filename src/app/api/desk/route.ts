@@ -38,8 +38,12 @@ export async function GET(request: Request) {
     return NextResponse.json(await scanDelayedDesk(held));
   } catch (error) {
     const reason = error instanceof Error ? error.message : "扫描失败";
-    const fallback = getDeskPayload("ok");
-    fallback.notice = `公开日K没拉到（${reason}），已改用离线演示。请重启 npm run dev 后打开 /api/kline?code=000001。腾讯 501 时服务端会改拉新浪日K。`;
-    return NextResponse.json(fallback);
+    return NextResponse.json(
+      {
+        error: reason,
+        hint: "未切离线演示时不会改用 40 只备用池或假候选。修好快照/日K库后再刷新，或主动点「改用离线演示」。",
+      },
+      { status: 503 },
+    );
   }
 }

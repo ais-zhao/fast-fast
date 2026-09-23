@@ -53,12 +53,12 @@ npm run kline:warm -- --limit 30
 
 ## 本地运行
 
-需要 Node.js 20+。全市场快照优先走 AKShare（封装腾讯行情，带量比）。没装 Python 依赖时，仍会退回东方财富/新浪列表。
+需要 Node.js 20+。全市场快照优先走 AKShare（封装腾讯行情，带量比）。没装 Python 依赖或快照全失败时，**会报错停住**，不会静默改用 40 只备用池。只有你主动点「改用离线演示」才用假数据。
 
 ```bash
 python3 -m pip install -r requirements.txt
 npm install
-npm run kline:warm -- --limit 50   # 先小跑验证
+npm run kline:warm -- --limit 50   # 先小跑验证；快照失败会直接报错
 npm run dev
 ```
 

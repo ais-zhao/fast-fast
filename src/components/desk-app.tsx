@@ -64,18 +64,19 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
       const held = paper.positions.map((item) => item.code).join(",");
       const response = await fetch(`/api/desk?scene=${nextScene}&held=${held}`, { cache: "no-store" });
       if (!response.ok) {
-        if (nextScene === "error") {
-          const body = (await response.json().catch(() => null)) as { error?: string } | null;
-          setError(body?.error ?? "行情源暂时不可用。");
-          setPayload((current) => ({ ...current, candidates: [] }));
-          setLoadState("error");
-          return;
-        }
-        const fallback = getDeskPayload("ok");
-        fallback.notice = "公开延迟行情暂不可用，已改用离线演示数据。请打开 /api/kline?code=000001 看上游是否 200。";
-        setPayload(fallback);
-        setQuotes(fallback.quotes);
-        setLoadState("ready");
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+          hint?: string;
+        } | null;
+        const message = [body?.error, body?.hint].filter(Boolean).join(" ");
+        setError(message || "公开行情暂不可用。未切离线演示时不会改用假候选。");
+        setPayload((current) => ({
+          ...current,
+          candidates: [],
+          dataSource: "delayed-public",
+          notice: message || current.notice,
+        }));
+        setLoadState("error");
         return;
       }
       const next = (await response.json()) as DeskPayload;
@@ -83,11 +84,9 @@ export function DeskApp({ initialPayload }: { initialPayload: DeskPayload }) {
       setQuotes(next.quotes ?? {});
       setLoadState("ready");
     } catch {
-      const fallback = getDeskPayload("ok");
-      fallback.notice = "连不上本机 /api/desk，已改用离线演示。确认开发服务在 43127 且已 git pull。";
-      setPayload(fallback);
-      setQuotes(fallback.quotes);
-      setLoadState("ready");
+      setError("连不上本机 /api/desk。确认开发服务在 43127 且已 git pull。未切离线演示时不会改用假候选。");
+      setPayload((current) => ({ ...current, candidates: [], dataSource: "delayed-public" }));
+      setLoadState("error");
     }
   }
 
