@@ -9,6 +9,19 @@ import sys
 
 os.environ.setdefault("TQDM_DISABLE", "1")
 
+# Clash / local HTTP proxies often break mainland quote hosts. Always hit them directly.
+for _key in (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+):
+    os.environ.pop(_key, None)
+os.environ["NO_PROXY"] = "*"
+os.environ["no_proxy"] = "*"
+
 
 def as_float(value: object) -> float | None:
     if value is None or value == "" or value == "-":
@@ -91,7 +104,17 @@ def main() -> int:
             rows = rows_from_sina(ak.stock_zh_a_spot())
             via = "akshare-sina"
         except Exception as sina_error:
-            json.dump({"error": f"akshare 腾讯和新浪快照都失败：{sina_error}"}, sys.stdout, ensure_ascii=False)
+            json.dump(
+                {
+                    "error": (
+                        f"akshare 腾讯和新浪快照都失败：{sina_error}。"
+                        "若错误里出现 127.0.0.1:7890，说明本机代理拦住了行情，"
+                        "请 unset HTTP_PROXY HTTPS_PROXY ALL_PROXY 后重试，或 pull 最新分支（脚本已强制直连）。"
+                    )
+                },
+                sys.stdout,
+                ensure_ascii=False,
+            )
             return 1
 
     json.dump({"via": via, "total": len(rows), "rows": rows}, sys.stdout, ensure_ascii=False)

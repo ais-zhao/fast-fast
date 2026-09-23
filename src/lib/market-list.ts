@@ -2,10 +2,12 @@ import "server-only";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
+import { disableProcessProxy, envWithoutProxy } from "@/lib/direct-net";
 import { mapPool, tencentSymbol } from "@/lib/public-kline";
 import { asSnapshot, type SnapshotQuote } from "@/lib/snapshot-filter";
 
 const execFileAsync = promisify(execFile);
+disableProcessProxy();
 
 const BROWSERISH = {
   Accept: "*/*",
@@ -57,8 +59,21 @@ async function curlJson(url: string, extraHeaders: string[] = []): Promise<unkno
   try {
     const { stdout } = await execFileAsync(
       "curl",
-      ["-sS", "-m", "12", "--http1.1", "-H", "Accept: */*", "-H", "User-Agent: Mozilla/5.0", ...extraHeaders, url],
-      { encoding: "utf8", maxBuffer: 5_000_000 },
+      [
+        "-sS",
+        "-m",
+        "12",
+        "--http1.1",
+        "--noproxy",
+        "*",
+        "-H",
+        "Accept: */*",
+        "-H",
+        "User-Agent: Mozilla/5.0",
+        ...extraHeaders,
+        url,
+      ],
+      { encoding: "utf8", maxBuffer: 5_000_000, env: envWithoutProxy() },
     );
     return JSON.parse(stdout);
   } catch {
@@ -267,7 +282,7 @@ async function fetchAkshareList(): Promise<MarketListResult | null> {
     const { stdout } = await execFileAsync("python3", [path.join(process.cwd(), "scripts/akshare_spot.py")], {
       timeout: 45_000,
       maxBuffer: 12_000_000,
-      env: { ...process.env, TQDM_DISABLE: "1", PYTHONUNBUFFERED: "1" },
+      env: { ...envWithoutProxy(), TQDM_DISABLE: "1", PYTHONUNBUFFERED: "1" },
     });
     const payload = JSON.parse(stdout) as AksharePayload;
     if (payload.error || !Array.isArray(payload.rows)) return null;
@@ -307,8 +322,8 @@ async function loadQuoteText(url: string, signal?: AbortSignal): Promise<string 
   try {
     const { stdout } = await execFileAsync(
       "curl",
-      ["-sS", "-m", "10", "--http1.1", "-H", "User-Agent: Mozilla/5.0", url],
-      { encoding: "buffer", maxBuffer: 2_000_000 },
+      ["-sS", "-m", "10", "--http1.1", "--noproxy", "*", "-H", "User-Agent: Mozilla/5.0", url],
+      { encoding: "buffer", maxBuffer: 2_000_000, env: envWithoutProxy() },
     );
     return new TextDecoder("gbk").decode(stdout);
   } catch {

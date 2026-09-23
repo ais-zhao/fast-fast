@@ -45,6 +45,7 @@ npm run kline:warm -- --limit 30
 - 库文件：`data/kline.sqlite`（已 gitignore）
 - 进度：`http://127.0.0.1:43127/api/kline-cache`
 - 单票调试仍可用 `/api/kline?code=000001`
+- 若终端开了 Clash 等代理（常见 `127.0.0.1:7890`），拉 A 股公开行情会失败。代码已对快照/日K直连；仍失败可先 `unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy`
 - 若某源熔断：先停，过会儿再续跑；**不要加大并发硬刚**
 - 首次铺库可能要数小时；宁慢勿封
 

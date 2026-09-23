@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { disableProcessProxy, envWithoutProxy } from "@/lib/direct-net";
 import {
   type DailyBar,
   type StockKline,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/polite-fetch";
 
 const execFileAsync = promisify(execFile);
+disableProcessProxy();
 
 const BROWSERISH = {
   Accept: "*/*",
@@ -103,8 +105,21 @@ async function curlJson(url: string, extraHeaders: string[] = []): Promise<unkno
   try {
     const { stdout } = await execFileAsync(
       "curl",
-      ["-sS", "-m", "12", "--http1.1", "-H", "Accept: */*", "-H", "User-Agent: Mozilla/5.0", ...extraHeaders, url],
-      { encoding: "utf8", maxBuffer: 5_000_000 },
+      [
+        "-sS",
+        "-m",
+        "12",
+        "--http1.1",
+        "--noproxy",
+        "*",
+        "-H",
+        "Accept: */*",
+        "-H",
+        "User-Agent: Mozilla/5.0",
+        ...extraHeaders,
+        url,
+      ],
+      { encoding: "utf8", maxBuffer: 5_000_000, env: envWithoutProxy() },
     );
     return JSON.parse(stdout);
   } catch {

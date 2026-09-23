@@ -1,3 +1,4 @@
+import { disableProcessProxy } from "@/lib/direct-net";
 import { chinaTodayISO, previousTradingDay, sessionMeta } from "@/lib/market";
 import { fetchAShareSnapshots } from "@/lib/market-list";
 import { fetchKlineSharded, preferredKlineSource } from "@/lib/kline-sources";
@@ -12,6 +13,8 @@ import {
 import { configurePoliteSource, politeSourceStatus } from "@/lib/polite-fetch";
 import { cheapSkip } from "@/lib/snapshot-filter";
 import { SCAN_UNIVERSE } from "@/lib/universe";
+
+disableProcessProxy();
 
 export type WarmOptions = {
   limit?: number;
